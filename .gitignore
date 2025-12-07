@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+android/app/build/
+android/.gradle/
+android/build/
+*.apk
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Capacitor
+android/capacitor-cordova-android-plugins/
+android/app/src/main/assets/public/

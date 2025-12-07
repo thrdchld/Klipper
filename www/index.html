@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#6366f1">
+    <title>Video Clipper</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="app-header">
+        <h1 class="app-title">Video Clipper</h1>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+
+        <!-- STEP 1: Video Selection -->
+        <section id="step1" class="step-section active">
+            <div class="step-content">
+                <input type="file" id="videoInput" accept="video/*" style="display: none;">
+                <button id="selectVideoBtn" class="btn-primary btn-large">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                        <circle cx="12" cy="13" r="4" />
+                    </svg>
+                    Pilih Video
+                </button>
+
+                <div id="videoPreviewContainer" class="video-preview-container hidden">
+                    <div class="video-wrapper aspect-9-16">
+                        <video id="videoPreview" class="video-element"></video>
+                        <div id="watermarkOverlay" class="watermark-overlay hidden"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- STEP 2: Timestamp Input -->
+        <section id="step2" class="step-section">
+            <div class="step-content">
+                <h2 class="step-title">Masukkan Timestamp</h2>
+                <p class="step-description">Format: HH:MM:SS - HH:MM:SS atau MM:SS - MM:SS<br>Maksimal 20 bagian</p>
+
+                <textarea id="timestampInput" class="textarea-large"
+                    placeholder="00:01:04 - 00:01:20&#10;00:02:05 - 00:02:14&#10;00:03:10 - 00:03:25"
+                    rows="10"></textarea>
+
+                <div id="timestampError" class="error-message hidden"></div>
+            </div>
+        </section>
+
+        <!-- STEP 3: Preview & Editing -->
+        <section id="step3" class="step-section">
+            <div class="step-content step3-layout">
+                <!-- Video Preview and Watermark Row -->
+                <div class="preview-watermark-row">
+                    <!-- Video Preview -->
+                    <div class="preview-video">
+                        <div class="video-wrapper aspect-9-16 video-small">
+                            <video id="videoPreview3" class="video-element"></video>
+                            <div id="watermarkOverlay3" class="watermark-overlay hidden"></div>
+                        </div>
+                    </div>
+
+                    <!-- Watermark Panel -->
+                    <div class="watermark-panel">
+                        <label class="watermark-toggle">
+                            <input type="checkbox" id="watermarkToggle">
+                            <span class="toggle-label">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                                    <path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
+                                </svg>
+                                Watermark
+                            </span>
+                        </label>
+
+                        <div id="watermarkOptions" class="watermark-options hidden">
+                            <input type="text" id="watermarkText" class="input-text"
+                                placeholder="Masukkan teks watermark">
+
+                            <div class="position-selector">
+                                <label>Posisi:</label>
+                                <select id="watermarkPosition" class="select-input">
+                                    <option value="center" selected>Center</option>
+                                    <option value="top">Top</option>
+                                    <option value="bottom">Bottom</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Parts List -->
+                <div class="parts-section">
+                    <h3 class="parts-title">Daftar Part</h3>
+                    <div id="partsList" class="parts-list">
+                        <!-- Parts will be added dynamically -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- STEP 4: Processing -->
+        <section id="step4" class="step-section">
+            <div class="step-content">
+                <h2 class="step-title">Processing Video</h2>
+
+                <div class="processing-info">
+                    <div class="progress-container">
+                        <div id="progressBar" class="progress-bar">
+                            <div id="progressFill" class="progress-fill"></div>
+                        </div>
+                        <div id="progressText" class="progress-text">0%</div>
+                    </div>
+
+                    <div class="info-row">
+                        <span class="info-label">Klip Selesai:</span>
+                        <span id="clipsCompleted" class="info-value">0 / 0</span>
+                    </div>
+
+                    <div class="info-row">
+                        <span class="info-label">Status:</span>
+                        <span id="processStatus" class="info-value">Siap</span>
+                    </div>
+
+                    <div class="info-row">
+                        <span class="info-label">Lokasi Hasil:</span>
+                        <span id="outputPath" class="info-value path">-</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav class="bottom-nav">
+        <button id="backBtn" class="nav-btn hidden">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            Kembali
+        </button>
+
+        <div class="step-indicator">
+            <span class="step-dot" data-step="1"></span>
+            <span class="step-dot" data-step="2"></span>
+            <span class="step-dot" data-step="3"></span>
+            <span class="step-dot" data-step="4"></span>
+        </div>
+
+        <button id="nextBtn" class="nav-btn hidden">
+            Lanjut
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+        </button>
+    </nav>
+
+    <!-- Confirmation Dialog -->
+    <div id="confirmDialog" class="dialog-overlay hidden">
+        <div class="dialog-content">
+            <h3 class="dialog-title">Batalkan Proses?</h3>
+            <p class="dialog-message">Apakah Anda yakin ingin membatalkan proses ini?</p>
+            <div class="dialog-actions">
+                <button id="cancelNo" class="btn-secondary">Tidak</button>
+                <button id="cancelYes" class="btn-danger">Ya, Batalkan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Part Dialog -->
+    <div id="editDialog" class="dialog-overlay hidden">
+        <div class="dialog-content">
+            <h3 class="dialog-title">Edit Part</h3>
+            <div class="edit-form">
+                <div class="form-group">
+                    <label>Mulai:</label>
+                    <input type="text" id="editStart" class="input-text" placeholder="00:01:04">
+                </div>
+                <div class="form-group">
+                    <label>Selesai:</label>
+                    <input type="text" id="editEnd" class="input-text" placeholder="00:01:20">
+                </div>
+            </div>
+            <div class="dialog-actions">
+                <button id="editCancel" class="btn-secondary">Batal</button>
+                <button id="editSave" class="btn-primary">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
