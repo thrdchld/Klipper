@@ -1,10 +1,39 @@
 // ========================================
+// CAPACITOR NATIVE PLUGIN IMPORTS
+// ========================================
+// Plugins are loaded from Capacitor.Plugins after DOM ready
+let FilePicker = null;
+let Filesystem = null;
+let FFmpegPlugin = null;
+let Capacitor = null;
+
+// Check if running on native platform
+const isNative = () => {
+    return window.Capacitor && window.Capacitor.isNativePlatform();
+};
+
+// Initialize Capacitor plugins when available
+function initCapacitorPlugins() {
+    if (window.Capacitor) {
+        Capacitor = window.Capacitor;
+        const Plugins = Capacitor.Plugins;
+        FilePicker = Plugins.FilePicker;
+        Filesystem = Plugins.Filesystem;
+        FFmpegPlugin = Plugins.FFmpegPlugin;
+        console.log('Capacitor plugins loaded:', { FilePicker, Filesystem, FFmpegPlugin });
+    } else {
+        console.log('Running in web mode - native plugins not available');
+    }
+}
+
+// ========================================
 // APPLICATION STATE
 // ========================================
 const AppState = {
     currentStep: 1,
     videoFile: null,
-    videoURL: null,
+    videoPath: null,  // Native file path
+    videoURL: null,   // Blob URL for preview
     parts: [],
     watermark: {
         enabled: false,
@@ -116,12 +145,8 @@ function updateNavButtons() {
     // Next button visibility and text
     if (step === 1) {
         Elements.nextBtn.classList.toggle('hidden', !AppState.videoFile);
-        Elements.nextBtn.textContent = 'Lanjut';
         Elements.nextBtn.innerHTML = 'Lanjut<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
-    } else if (step === 2) {
-        Elements.nextBtn.classList.remove('hidden');
-        Elements.nextBtn.innerHTML = 'Lanjut<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
-    } else if (step === 3) {
+    } else if (step === 2 || step === 3) {
         Elements.nextBtn.classList.remove('hidden');
         Elements.nextBtn.innerHTML = 'Lanjut<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
     } else if (step === 4) {
@@ -131,22 +156,51 @@ function updateNavButtons() {
 }
 
 // ========================================
-// STEP 1: VIDEO SELECTION
+// STEP 1: VIDEO SELECTION - NATIVE
 // ========================================
-Elements.selectVideoBtn.addEventListener('click', () => {
-    Elements.videoInput.click();
+Elements.selectVideoBtn.addEventListener('click', async () => {
+    if (isNative() && FilePicker) {
+        // Use native file picker
+        try {
+            const result = await FilePicker.pickVideos({ limit: 1 });
+
+            if (result.files && result.files.length > 0) {
+                const file = result.files[0];
+                AppState.videoFile = file;
+                AppState.videoPath = file.path;
+
+                // Convert native path to displayable URL
+                AppState.videoURL = Capacitor.convertFileSrc(file.path);
+
+                // Show preview
+                Elements.videoPreview.src = AppState.videoURL;
+                Elements.videoPreviewContainer.classList.remove('hidden');
+
+                console.log('Video selected:', file.path);
+                updateNavButtons();
+            }
+        } catch (e) {
+            console.error('Video selection error:', e);
+            alert('Gagal memilih video: ' + e.message);
+        }
+    } else {
+        // Fallback to HTML file input for web
+        Elements.videoInput.click();
+    }
 });
 
+// Web fallback handler
 Elements.videoInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     // Revoke old URL if exists
-    if (AppState.videoURL) {
+    if (AppState.videoURL && AppState.videoURL.startsWith('blob:')) {
         URL.revokeObjectURL(AppState.videoURL);
     }
 
     AppState.videoFile = file;
+    AppState.videoPath = file.name; // Web doesn't have real path
     AppState.videoURL = URL.createObjectURL(file);
 
     // Show preview
@@ -160,14 +214,11 @@ Elements.videoInput.addEventListener('change', (e) => {
 // STEP 2: TIMESTAMP PARSING
 // ========================================
 function parseTimestamp(timeStr) {
-    // Format: HH:MM:SS or MM:SS
     const parts = timeStr.trim().split(':').map(p => parseInt(p, 10));
 
     if (parts.length === 2) {
-        // MM:SS
         return parts[0] * 60 + parts[1];
     } else if (parts.length === 3) {
-        // HH:MM:SS
         return parts[0] * 3600 + parts[1] * 60 + parts[2];
     }
 
@@ -177,13 +228,9 @@ function parseTimestamp(timeStr) {
 function formatTimestamp(seconds) {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
+    const s = Math.floor(seconds % 60);
 
-    if (h > 0) {
-        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    } else {
-        return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    }
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 function parseTimestamps() {
@@ -252,7 +299,6 @@ function showTimestampError(message) {
 // ========================================
 // STEP 3: PREVIEW & EDITING
 // ========================================
-
 function renderPartsList() {
     Elements.partsList.innerHTML = '';
 
@@ -342,30 +388,19 @@ function updateWatermarkDisplay() {
             overlay.textContent = AppState.watermark.text;
             overlay.classList.remove('hidden');
 
-            // Remove existing position classes
             overlay.classList.remove('position-top', 'position-bottom', 'position-center');
-            // Add position class
             overlay.classList.add(`position-${AppState.watermark.position}`);
 
-            // Dynamic font sizing - more aggressive for longer text
             const textLength = AppState.watermark.text.length;
             let fontSize;
 
-            if (textLength <= 10) {
-                fontSize = '16px';
-            } else if (textLength <= 15) {
-                fontSize = '14px';
-            } else if (textLength <= 20) {
-                fontSize = '12px';
-            } else if (textLength <= 30) {
-                fontSize = '11px';
-            } else if (textLength <= 40) {
-                fontSize = '10px';
-            } else if (textLength <= 50) {
-                fontSize = '9px';
-            } else {
-                fontSize = '8px';
-            }
+            if (textLength <= 10) fontSize = '16px';
+            else if (textLength <= 15) fontSize = '14px';
+            else if (textLength <= 20) fontSize = '12px';
+            else if (textLength <= 30) fontSize = '11px';
+            else if (textLength <= 40) fontSize = '10px';
+            else if (textLength <= 50) fontSize = '9px';
+            else fontSize = '8px';
 
             overlay.style.fontSize = fontSize;
         } else {
@@ -375,16 +410,15 @@ function updateWatermarkDisplay() {
     });
 }
 
-// Load saved watermark text
 if (AppState.watermark.text) {
     Elements.watermarkText.value = AppState.watermark.text;
 }
 
-// (Button removed from Step 3 - functionality moved to bottom nav)
+// ========================================
+// STEP 4: PROCESSING - NATIVE FFMPEG
+// ========================================
+const OUTPUT_DIR = '/storage/emulated/0/Movies/Klipper';
 
-// ========================================
-// STEP 4: PROCESSING
-// ========================================
 function prepareProcessingStep() {
     AppState.processing = {
         isRunning: false,
@@ -397,7 +431,7 @@ function prepareProcessingStep() {
     Elements.progressText.textContent = '0%';
     Elements.clipsCompleted.textContent = `0 / ${AppState.parts.length}`;
     Elements.processStatus.textContent = 'Siap';
-    Elements.outputPath.textContent = '/storage/emulated/0/VideoClipper/output/';
+    Elements.outputPath.textContent = OUTPUT_DIR;
     updateProcessButtonState();
 }
 
@@ -421,12 +455,77 @@ function handleProcessButtonClick() {
     }
 }
 
-function startProcessing() {
+async function startProcessing() {
     AppState.processing.isRunning = true;
     updateProcessButtonState();
-    Elements.processStatus.textContent = 'Berjalan...';
+    Elements.processStatus.textContent = 'Menyiapkan...';
 
-    simulateProcessing();
+    if (isNative() && FFmpegPlugin) {
+        await processWithFFmpeg();
+    } else {
+        // Fallback simulation for web
+        simulateProcessing();
+    }
+}
+
+async function processWithFFmpeg() {
+    const totalClips = AppState.parts.length;
+    const inputPath = AppState.videoPath;
+
+    Elements.processStatus.textContent = 'Memproses...';
+
+    for (let i = 0; i < totalClips; i++) {
+        if (!AppState.processing.isRunning) {
+            Elements.processStatus.textContent = 'Dibatalkan';
+            return;
+        }
+
+        const part = AppState.parts[i];
+        const outputFilename = `clip_${i + 1}_${Date.now()}.mp4`;
+        const outputPath = `${OUTPUT_DIR}/${outputFilename}`;
+
+        Elements.processStatus.textContent = `Memproses Part ${i + 1}/${totalClips}...`;
+
+        // Build FFmpeg command
+        let filterComplex = 'crop=ih*9/16:ih:(iw-ih*9/16)/2:0';
+
+        // Add watermark if enabled
+        if (AppState.watermark.enabled && AppState.watermark.text) {
+            const pos = AppState.watermark.position;
+            const yPos = pos === 'top' ? 'h*0.15' : pos === 'bottom' ? 'h*0.85-th' : '(h-th)/2';
+            const escapedText = AppState.watermark.text.replace(/'/g, "\\'").replace(/:/g, "\\:");
+            filterComplex += `,drawtext=text='${escapedText}':fontsize=48:fontcolor=white@0.6:x=(w-tw)/2:y=${yPos}:box=1:boxcolor=black@0.4:boxborderw=10`;
+        }
+
+        const command = `-y -i "${inputPath}" -ss ${part.startStr} -to ${part.endStr} -vf "${filterComplex}" -c:a aac -b:a 128k "${outputPath}"`;
+
+        console.log('FFmpeg command:', command);
+
+        try {
+            const result = await FFmpegPlugin.execute({ command });
+
+            if (result.success) {
+                console.log(`Part ${i + 1} completed:`, outputPath);
+            } else {
+                console.error(`Part ${i + 1} failed:`, result.error);
+                Elements.processStatus.textContent = `Error: ${result.error}`;
+            }
+        } catch (e) {
+            console.error('FFmpeg error:', e);
+            Elements.processStatus.textContent = `Error: ${e.message}`;
+        }
+
+        // Update progress
+        const progress = ((i + 1) / totalClips) * 100;
+        AppState.processing.progress = progress;
+        AppState.processing.completedClips = i + 1;
+
+        Elements.progressBar.style.width = `${progress}%`;
+        Elements.progressText.textContent = `${Math.round(progress)}%`;
+        Elements.clipsCompleted.textContent = `${i + 1} / ${totalClips}`;
+    }
+
+    finishProcessing();
 }
 
 function simulateProcessing() {
@@ -439,22 +538,20 @@ function simulateProcessing() {
             return;
         }
 
-        // Simulate progress
         const progress = Math.min(100, AppState.processing.progress + (100 / totalClips / 10));
         AppState.processing.progress = progress;
 
         Elements.progressBar.style.width = `${progress}%`;
         Elements.progressText.textContent = `${Math.round(progress)}%`;
 
-        // Update completed clips
         const completed = Math.floor((progress / 100) * totalClips);
         if (completed > currentClip) {
             currentClip = completed;
             AppState.processing.completedClips = completed;
             Elements.clipsCompleted.textContent = `${completed} / ${totalClips}`;
+            Elements.processStatus.textContent = `Processing Part ${completed}/${totalClips}...`;
         }
 
-        // Check if complete
         if (progress >= 100) {
             clearInterval(interval);
             finishProcessing();
@@ -465,14 +562,22 @@ function simulateProcessing() {
 function finishProcessing() {
     AppState.processing.isRunning = false;
     updateProcessButtonState();
-    Elements.processStatus.textContent = 'Selesai';
+    Elements.processStatus.textContent = 'Selesai! Cek folder ' + OUTPUT_DIR;
 }
 
 function showCancelConfirmation() {
     Elements.confirmDialog.classList.remove('hidden');
 }
 
-function cancelProcessing() {
+async function cancelProcessing() {
+    if (isNative() && FFmpegPlugin) {
+        try {
+            await FFmpegPlugin.cancel();
+        } catch (e) {
+            console.error('Cancel error:', e);
+        }
+    }
+
     AppState.processing.isRunning = false;
     AppState.processing.progress = 0;
     updateProcessButtonState();
@@ -480,7 +585,6 @@ function cancelProcessing() {
 }
 
 function resetToStep1() {
-    // Reset state
     AppState.currentStep = 1;
     AppState.parts = [];
     AppState.processing = {
@@ -490,7 +594,6 @@ function resetToStep1() {
         totalClips: 0
     };
 
-    // Clear inputs
     Elements.timestampInput.value = '';
     Elements.partsList.innerHTML = '';
 
@@ -570,8 +673,14 @@ Elements.nextBtn.addEventListener('click', () => {
 // INITIALIZATION
 // ========================================
 function init() {
+    initCapacitorPlugins();
     goToStep(1);
+    console.log('Klipper initialized. Native mode:', isNative());
 }
 
-// Start the app
-init();
+// Start the app when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
