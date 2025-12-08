@@ -20,9 +20,21 @@ function initCapacitorPlugins() {
         FilePicker = Plugins.FilePicker;
         Filesystem = Plugins.Filesystem;
         FFmpegPlugin = Plugins.FFmpegPlugin;
-        console.log('Capacitor plugins loaded:', { FilePicker, Filesystem, FFmpegPlugin });
+
+        console.log('Capacitor plugins loaded:', {
+            isNative: Capacitor.isNativePlatform(),
+            FilePicker: !!FilePicker,
+            Filesystem: !!Filesystem,
+            FFmpegPlugin: !!FFmpegPlugin
+        });
+
+        // Debug alert for testing
+        alert('Mode: ' + (Capacitor.isNativePlatform() ? 'NATIVE' : 'WEB') +
+            '\nFFmpegPlugin: ' + (FFmpegPlugin ? 'Loaded' : 'Not Found') +
+            '\nFilePicker: ' + (FilePicker ? 'Loaded' : 'Not Found'));
     } else {
         console.log('Running in web mode - native plugins not available');
+        alert('Web Mode - Capacitor not detected');
     }
 }
 
@@ -460,17 +472,63 @@ async function startProcessing() {
     updateProcessButtonState();
     Elements.processStatus.textContent = 'Menyiapkan...';
 
-    if (isNative() && FFmpegPlugin) {
+    // Debug: show which mode we're using
+    const nativeMode = isNative() && FFmpegPlugin;
+    console.log('Processing mode:', nativeMode ? 'NATIVE FFmpeg' : 'WEB Simulation');
+    console.log('isNative():', isNative());
+    console.log('FFmpegPlugin:', FFmpegPlugin);
+
+    if (nativeMode) {
+        // Create output directory first
+        await createOutputDirectory();
         await processWithFFmpeg();
     } else {
-        // Fallback simulation for web
+        // Show why we're using fallback
+        alert('Using simulation mode.\nisNative: ' + isNative() + '\nFFmpegPlugin: ' + !!FFmpegPlugin);
         simulateProcessing();
+    }
+}
+
+// Create output directory using Filesystem plugin
+async function createOutputDirectory() {
+    if (!Filesystem) {
+        console.log('Filesystem plugin not available');
+        return;
+    }
+
+    try {
+        // Try to create directory in external storage
+        await Filesystem.mkdir({
+            path: 'Klipper',
+            directory: 'EXTERNAL_STORAGE',
+            recursive: true
+        });
+        console.log('Output directory created');
+    } catch (e) {
+        // Directory might already exist or we don't have permission
+        console.log('Create directory result:', e.message);
+
+        // Try Movies folder instead
+        try {
+            await Filesystem.mkdir({
+                path: 'Movies/Klipper',
+                directory: 'EXTERNAL_STORAGE',
+                recursive: true
+            });
+            console.log('Movies/Klipper directory created');
+        } catch (e2) {
+            console.log('Movies directory result:', e2.message);
+        }
     }
 }
 
 async function processWithFFmpeg() {
     const totalClips = AppState.parts.length;
     const inputPath = AppState.videoPath;
+
+    // Debug: show video path
+    alert('Starting FFmpeg processing\nVideo: ' + inputPath + '\nParts: ' + totalClips);
+    console.log('Input video path:', inputPath);
 
     Elements.processStatus.textContent = 'Memproses...';
 
@@ -482,7 +540,8 @@ async function processWithFFmpeg() {
 
         const part = AppState.parts[i];
         const outputFilename = `clip_${i + 1}_${Date.now()}.mp4`;
-        const outputPath = `${OUTPUT_DIR}/${outputFilename}`;
+        // Use app's cache directory for output (more reliable)
+        const outputPath = `/data/data/com.klipper.app/cache/${outputFilename}`;
 
         Elements.processStatus.textContent = `Memproses Part ${i + 1}/${totalClips}...`;
 
@@ -500,19 +559,27 @@ async function processWithFFmpeg() {
         const command = `-y -i "${inputPath}" -ss ${part.startStr} -to ${part.endStr} -vf "${filterComplex}" -c:a aac -b:a 128k "${outputPath}"`;
 
         console.log('FFmpeg command:', command);
+        alert('Executing FFmpeg:\n' + command.substring(0, 200) + '...');
 
         try {
-            const result = await FFmpegPlugin.execute({ command });
+            Elements.processStatus.textContent = `Processing Part ${i + 1}...`;
+            const result = await FFmpegPlugin.execute({ command: command });
 
-            if (result.success) {
+            console.log('FFmpeg result:', result);
+
+            if (result && result.success) {
                 console.log(`Part ${i + 1} completed:`, outputPath);
+                alert('Part ' + (i + 1) + ' completed!');
             } else {
-                console.error(`Part ${i + 1} failed:`, result.error);
-                Elements.processStatus.textContent = `Error: ${result.error}`;
+                const errMsg = result ? result.error : 'Unknown error';
+                console.error(`Part ${i + 1} failed:`, errMsg);
+                Elements.processStatus.textContent = `Error: ${errMsg}`;
+                alert('FFmpeg Error: ' + errMsg);
             }
         } catch (e) {
             console.error('FFmpeg error:', e);
             Elements.processStatus.textContent = `Error: ${e.message}`;
+            alert('FFmpeg Exception: ' + e.message);
         }
 
         // Update progress
