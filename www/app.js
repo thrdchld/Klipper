@@ -46,16 +46,21 @@ async function checkAndRequestStoragePermission() {
         if (!status.granted) {
             // Show explanation to user
             const userConfirm = confirm(
-                'Klipper membutuhkan izin akses penyimpanan untuk menyimpan video hasil potongan ke folder Movies.\n\n' +
-                'Tekan OK untuk memberikan izin.'
+                'Klipper membutuhkan izin akses penyimpanan untuk menyimpan video hasil potongan.\n\n' +
+                'Tekan OK untuk membuka pengaturan izin.'
             );
 
             if (userConfirm) {
                 const result = await FFmpegPlugin.requestStoragePermission();
                 console.log('Permission request result:', result);
 
-                if (!result.granted) {
-                    alert('Izin penyimpanan ditolak. Video akan disimpan di cache saja.');
+                // If settings was opened, don't show error - user will grant from there
+                if (result.opened) {
+                    console.log('Settings opened for permission grant');
+                }
+                // Only show error for Android 6-10 where we get direct grant/deny result
+                else if (result.granted === false) {
+                    alert('Izin penyimpanan tidak diberikan. Anda bisa mengaktifkannya nanti dari pengaturan.');
                 }
             }
         }
@@ -300,40 +305,26 @@ function updateFolderDisplay() {
     }
 }
 
-// Folder picker handler
-Elements.changeFolderBtn.addEventListener('click', async () => {
-    if (isNative() && FilePicker) {
-        try {
-            // Use directory picker if available
-            const result = await FilePicker.pickDirectory();
-            if (result && result.path) {
-                AppState.outputFolder = result.path;
-                updateFolderDisplay();
-            }
-        } catch (e) {
-            // Fallback: show preset options
-            const options = [
-                '/storage/emulated/0/Movies',
-                '/storage/emulated/0/Download',
-                '/storage/emulated/0/DCIM'
-            ];
+// Folder picker handler - use preset options (SAF returns unusable content:// URIs)
+Elements.changeFolderBtn.addEventListener('click', () => {
+    const options = [
+        '/storage/emulated/0/Movies',
+        '/storage/emulated/0/Download',
+        '/storage/emulated/0/DCIM'
+    ];
 
-            const choice = prompt(
-                'Pilih folder output:\n' +
-                '1. Movies/Klipper\n' +
-                '2. Download/Klipper\n' +
-                '3. DCIM/Klipper\n\n' +
-                'Masukkan nomor (1-3):'
-            );
+    const choice = prompt(
+        'Pilih folder output:\n\n' +
+        '1. Movies/Klipper\n' +
+        '2. Download/Klipper\n' +
+        '3. DCIM/Klipper\n\n' +
+        'Masukkan nomor (1-3):'
+    );
 
-            const index = parseInt(choice) - 1;
-            if (index >= 0 && index < options.length) {
-                AppState.outputFolder = options[index];
-                updateFolderDisplay();
-            }
-        }
-    } else {
-        alert('Folder picker hanya tersedia di aplikasi native.');
+    const index = parseInt(choice) - 1;
+    if (index >= 0 && index < options.length) {
+        AppState.outputFolder = options[index];
+        updateFolderDisplay();
     }
 });
 
