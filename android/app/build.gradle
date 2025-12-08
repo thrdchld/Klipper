@@ -28,6 +28,9 @@ repositories {
     flatDir{
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
     }
+    maven {
+        url "https://artifactory.appodeal.com/appodeal-public"
+    }
 }
 
 dependencies {
@@ -37,8 +40,8 @@ dependencies {
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
     
-    // FFmpeg-kit for video processing
-    implementation 'com.arthenica:ffmpeg-kit-full:6.0-2'
+    // FFmpeg-kit for video processing (from Appodeal artifactory)
+    implementation 'com.arthenica:ffmpeg-kit-full-gpl:6.0-2.LTS'
     
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
