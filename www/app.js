@@ -175,6 +175,7 @@ function goToStep(step) {
     }
 
     if (step === 4) {
+        updateFolderDisplay();
         prepareProcessingStep();
     }
 }
@@ -680,25 +681,19 @@ async function processWithFFmpeg() {
 
         Elements.processStatus.textContent = `Memproses Part ${i + 1}/${totalClips}...`;
 
-        // Build FFmpeg command with optional watermark
-        // Crop to 9:16 center
+        // Build FFmpeg command - TEMPORARILY SKIP WATERMARK for debugging
+        // Just crop to 9:16 center
         let filterComplex = 'crop=in_h*9/16:in_h';
 
-        // Add watermark if enabled (simple drawtext - uses system default font)
-        if (AppState.watermark.enabled && AppState.watermark.text) {
-            const pos = AppState.watermark.position;
-            const yPos = pos === 'top' ? 'h*0.12' : pos === 'bottom' ? 'h*0.88-th' : '(h-th)/2';
-            // Escape special characters for FFmpeg
-            const escapedText = AppState.watermark.text
-                .replace(/\\/g, '\\\\')
-                .replace(/'/g, "'\\''")
-                .replace(/:/g, '\\:');
-            filterComplex += `,drawtext=text='${escapedText}':fontsize=42:fontcolor=white@0.8:x=(w-tw)/2:y=${yPos}:box=1:boxcolor=black@0.4:boxborderw=8`;
-        }
+        // TODO: Re-enable watermark after basic processing works
+        // Watermark temporarily disabled to debug FFmpeg code 1 error
 
         const command = `-y -i "${inputPath}" -ss ${part.startStr} -to ${part.endStr} -vf "${filterComplex}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${outputPath}"`;
 
         console.log('FFmpeg command:', command);
+
+        // Debug: Show command before execution
+        alert('Input: ' + inputPath + '\nOutput: ' + outputPath + '\nTimestamp: ' + part.startStr + ' - ' + part.endStr);
 
         try {
             Elements.processStatus.textContent = `Memproses Part ${i + 1}/${totalClips}...`;
