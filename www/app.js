@@ -524,10 +524,39 @@ async function createOutputDirectory() {
 
 async function processWithFFmpeg() {
     const totalClips = AppState.parts.length;
-    const inputPath = AppState.videoPath;
+    let inputPath = AppState.videoPath;
+
+    Elements.processStatus.textContent = 'Menyiapkan video...';
+
+    // If it's a content:// URI, we need to copy it to cache first
+    if (inputPath.startsWith('content://')) {
+        console.log('Content URI detected, copying to cache...');
+        alert('Copying video to cache...');
+
+        try {
+            const copyResult = await FFmpegPlugin.copyToCache({ uri: inputPath });
+
+            if (copyResult && copyResult.success) {
+                inputPath = copyResult.path;
+                console.log('Video copied to:', inputPath);
+                alert('Video ready: ' + inputPath);
+            } else {
+                const errMsg = copyResult ? copyResult.error : 'Unknown copy error';
+                alert('Copy failed: ' + errMsg);
+                Elements.processStatus.textContent = 'Error: ' + errMsg;
+                finishProcessing();
+                return;
+            }
+        } catch (e) {
+            alert('Copy exception: ' + e.message);
+            Elements.processStatus.textContent = 'Error: ' + e.message;
+            finishProcessing();
+            return;
+        }
+    }
 
     // Debug: show video path
-    alert('Starting FFmpeg processing\nVideo: ' + inputPath + '\nParts: ' + totalClips);
+    alert('Starting FFmpeg\\nInput: ' + inputPath + '\\nParts: ' + totalClips);
     console.log('Input video path:', inputPath);
 
     Elements.processStatus.textContent = 'Memproses...';

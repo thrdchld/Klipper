@@ -1,6 +1,15 @@
 package com.klipper.app;
 
+import android.content.ContentResolver;
+import android.database.Cursor;
+import android.net.Uri;
+import android.provider.OpenableColumns;
 import android.util.Log;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 
 import com.arthenica.ffmpegkit.FFmpegKit;
 import com.arthenica.ffmpegkit.FFmpegSession;
@@ -18,6 +27,65 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 public class FFmpegPlugin extends Plugin {
     
     private static final String TAG = "FFmpegPlugin";
+    
+    @PluginMethod
+    public void copyToCache(PluginCall call) {
+        String contentUri = call.getString("uri");
+        
+        if (contentUri == null || contentUri.isEmpty()) {
+            call.reject("URI is required");
+            return;
+        }
+        
+        Log.d(TAG, "Copying to cache: " + contentUri);
+        
+        try {
+            Uri uri = Uri.parse(contentUri);
+            ContentResolver resolver = getContext().getContentResolver();
+            
+            // Get filename
+            String filename = "input_video.mp4";
+            Cursor cursor = resolver.query(uri, null, null, null, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                if (nameIndex >= 0) {
+                    filename = cursor.getString(nameIndex);
+                }
+                cursor.close();
+            }
+            
+            // Copy to cache
+            File cacheDir = getContext().getCacheDir();
+            File outputFile = new File(cacheDir, "ffmpeg_input_" + System.currentTimeMillis() + ".mp4");
+            
+            InputStream input = resolver.openInputStream(uri);
+            OutputStream output = new FileOutputStream(outputFile);
+            
+            byte[] buffer = new byte[4096];
+            int bytesRead;
+            while ((bytesRead = input.read(buffer)) != -1) {
+                output.write(buffer, 0, bytesRead);
+            }
+            
+            output.close();
+            input.close();
+            
+            Log.d(TAG, "Copied to: " + outputFile.getAbsolutePath());
+            
+            JSObject result = new JSObject();
+            result.put("success", true);
+            result.put("path", outputFile.getAbsolutePath());
+            result.put("originalName", filename);
+            call.resolve(result);
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Copy failed: " + e.getMessage());
+            JSObject result = new JSObject();
+            result.put("success", false);
+            result.put("error", e.getMessage());
+            call.resolve(result);
+        }
+    }
     
     @PluginMethod
     public void execute(PluginCall call) {
