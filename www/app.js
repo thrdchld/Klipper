@@ -569,26 +569,19 @@ async function processWithFFmpeg() {
 
         const part = AppState.parts[i];
         const outputFilename = `clip_${i + 1}_${Date.now()}.mp4`;
-        // Use app's cache directory for output (more reliable)
+        // Use app's cache directory for output
         const outputPath = `/data/data/com.klipper.app/cache/${outputFilename}`;
 
         Elements.processStatus.textContent = `Memproses Part ${i + 1}/${totalClips}...`;
 
-        // Build FFmpeg command
-        let filterComplex = 'crop=ih*9/16:ih:(iw-ih*9/16)/2:0';
-
-        // Add watermark if enabled
-        if (AppState.watermark.enabled && AppState.watermark.text) {
-            const pos = AppState.watermark.position;
-            const yPos = pos === 'top' ? 'h*0.15' : pos === 'bottom' ? 'h*0.85-th' : '(h-th)/2';
-            const escapedText = AppState.watermark.text.replace(/'/g, "\\'").replace(/:/g, "\\:");
-            filterComplex += `,drawtext=text='${escapedText}':fontsize=48:fontcolor=white@0.6:x=(w-tw)/2:y=${yPos}:box=1:boxcolor=black@0.4:boxborderw=10`;
-        }
-
-        const command = `-y -i "${inputPath}" -ss ${part.startStr} -to ${part.endStr} -vf "${filterComplex}" -c:a aac -b:a 128k "${outputPath}"`;
+        // Build simple FFmpeg command (no watermark for now - needs font setup)
+        // Just do: trim video + crop to 9:16
+        // Note: crop formula = crop=out_width:out_height:x:y
+        // For 9:16 from landscape: width = height * 9/16, x = center offset
+        const command = `-y -i "${inputPath}" -ss ${part.startStr} -to ${part.endStr} -vf "crop=in_h*9/16:in_h" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${outputPath}"`;
 
         console.log('FFmpeg command:', command);
-        alert('Executing FFmpeg:\n' + command.substring(0, 200) + '...');
+        alert('FFmpeg cmd:\\n' + command);
 
         try {
             Elements.processStatus.textContent = `Processing Part ${i + 1}...`;
@@ -598,12 +591,21 @@ async function processWithFFmpeg() {
 
             if (result && result.success) {
                 console.log(`Part ${i + 1} completed:`, outputPath);
-                alert('Part ' + (i + 1) + ' completed!');
+                alert('Part ' + (i + 1) + ' SUCCESS!\\nOutput: ' + outputPath);
             } else {
-                const errMsg = result ? result.error : 'Unknown error';
+                const errMsg = result ? result.error : 'No result';
+                const logs = result ? result.logs : '';
+                const retCode = result ? result.returnCode : 'N/A';
+
                 console.error(`Part ${i + 1} failed:`, errMsg);
-                Elements.processStatus.textContent = `Error: ${errMsg}`;
-                alert('FFmpeg Error: ' + errMsg);
+                console.error('Return code:', retCode);
+                console.error('Logs:', logs);
+
+                Elements.processStatus.textContent = `Error (code ${retCode})`;
+
+                // Show last part of error
+                const shortErr = errMsg.length > 300 ? '...' + errMsg.slice(-300) : errMsg;
+                alert('FFmpeg Error (code ' + retCode + '):\\n' + shortErr);
             }
         } catch (e) {
             console.error('FFmpeg error:', e);

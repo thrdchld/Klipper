@@ -98,23 +98,49 @@ public class FFmpegPlugin extends Plugin {
         
         Log.d(TAG, "Executing FFmpeg command: " + command);
         
-        // Execute FFmpeg command
-        FFmpegSession session = FFmpegKit.execute(command);
-        
-        JSObject result = new JSObject();
-        
-        if (ReturnCode.isSuccess(session.getReturnCode())) {
-            result.put("success", true);
-            result.put("output", session.getOutput());
+        try {
+            // Execute FFmpeg command
+            FFmpegSession session = FFmpegKit.execute(command);
+            
+            JSObject result = new JSObject();
+            int returnCode = session.getReturnCode().getValue();
+            String output = session.getOutput();
+            
+            result.put("returnCode", returnCode);
+            result.put("logs", output != null ? output : "");
+            
+            if (ReturnCode.isSuccess(session.getReturnCode())) {
+                result.put("success", true);
+                result.put("output", output);
+                Log.d(TAG, "FFmpeg success. Output: " + (output != null ? output.substring(0, Math.min(500, output.length())) : "null"));
+            } else if (ReturnCode.isCancel(session.getReturnCode())) {
+                result.put("success", false);
+                result.put("error", "Command cancelled");
+                Log.d(TAG, "FFmpeg cancelled");
+            } else {
+                String stackTrace = session.getFailStackTrace();
+                String errorMsg = "FFmpeg failed with return code " + returnCode;
+                
+                if (stackTrace != null && !stackTrace.isEmpty()) {
+                    errorMsg += ": " + stackTrace;
+                } else if (output != null && !output.isEmpty()) {
+                    // Get last 500 chars of output for error message
+                    int start = Math.max(0, output.length() - 500);
+                    errorMsg += ". Output: " + output.substring(start);
+                }
+                
+                result.put("success", false);
+                result.put("error", errorMsg);
+                Log.e(TAG, "FFmpeg failed: " + errorMsg);
+            }
+            
             call.resolve(result);
-        } else if (ReturnCode.isCancel(session.getReturnCode())) {
+            
+        } catch (Exception e) {
+            Log.e(TAG, "FFmpeg exception: " + e.getMessage());
+            JSObject result = new JSObject();
             result.put("success", false);
-            result.put("error", "Command cancelled");
-            call.resolve(result);
-        } else {
-            String error = session.getFailStackTrace();
-            result.put("success", false);
-            result.put("error", error != null ? error : "Unknown error");
+            result.put("error", "Exception: " + e.getMessage());
             call.resolve(result);
         }
     }
