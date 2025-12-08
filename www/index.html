@@ -30,10 +30,27 @@
                     Pilih Video
                 </button>
 
-                <div id="videoPreviewContainer" class="video-preview-container hidden">
-                    <div class="video-wrapper aspect-9-16">
-                        <video id="videoPreview" class="video-element"></video>
-                        <div id="watermarkOverlay" class="watermark-overlay hidden"></div>
+                <!-- Selected video info (hidden until video selected) -->
+                <div id="selectedVideoInfo" class="selected-video-info hidden">
+                    <p class="info-label">Video yang dipilih:</p>
+                    <div class="video-info-row">
+                        <img id="videoThumbnail" class="video-thumbnail" src="" alt="thumbnail">
+                        <span id="videoFilename" class="video-filename">-</span>
+                    </div>
+                </div>
+
+                <!-- Output folder selector -->
+                <div class="output-folder-section">
+                    <p class="info-label">Folder Output:</p>
+                    <div class="folder-row">
+                        <span id="outputFolderDisplay" class="folder-path">/Movies/Klipper</span>
+                        <button id="changeFolderBtn" class="btn-secondary btn-small">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                            </svg>
+                            Ganti
+                        </button>
                     </div>
                 </div>
             </div>

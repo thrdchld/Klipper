@@ -72,6 +72,8 @@ const AppState = {
     videoFile: null,
     videoPath: null,  // Native file path
     videoURL: null,   // Blob URL for preview
+    videoFilename: '',
+    outputFolder: '/storage/emulated/0/Movies',  // Parent folder (Klipper will be added)
     parts: [],
     watermark: {
         enabled: false,
@@ -96,9 +98,11 @@ const Elements = {
     // Step 1
     videoInput: document.getElementById('videoInput'),
     selectVideoBtn: document.getElementById('selectVideoBtn'),
-    videoPreviewContainer: document.getElementById('videoPreviewContainer'),
-    videoPreview: document.getElementById('videoPreview'),
-    watermarkOverlay: document.getElementById('watermarkOverlay'),
+    selectedVideoInfo: document.getElementById('selectedVideoInfo'),
+    videoThumbnail: document.getElementById('videoThumbnail'),
+    videoFilenameEl: document.getElementById('videoFilename'),
+    outputFolderDisplay: document.getElementById('outputFolderDisplay'),
+    changeFolderBtn: document.getElementById('changeFolderBtn'),
 
     // Step 2
     timestampInput: document.getElementById('timestampInput'),
@@ -206,13 +210,13 @@ Elements.selectVideoBtn.addEventListener('click', async () => {
                 const file = result.files[0];
                 AppState.videoFile = file;
                 AppState.videoPath = file.path;
+                AppState.videoFilename = file.name || file.path.split('/').pop();
 
-                // Convert native path to displayable URL
+                // Convert native path to displayable URL for thumbnail
                 AppState.videoURL = Capacitor.convertFileSrc(file.path);
 
-                // Show preview
-                Elements.videoPreview.src = AppState.videoURL;
-                Elements.videoPreviewContainer.classList.remove('hidden');
+                // Show thumbnail and filename
+                displaySelectedVideo();
 
                 console.log('Video selected:', file.path);
                 updateNavButtons();
@@ -239,13 +243,98 @@ Elements.videoInput.addEventListener('change', (e) => {
 
     AppState.videoFile = file;
     AppState.videoPath = file.name; // Web doesn't have real path
+    AppState.videoFilename = file.name;
     AppState.videoURL = URL.createObjectURL(file);
 
-    // Show preview
-    Elements.videoPreview.src = AppState.videoURL;
-    Elements.videoPreviewContainer.classList.remove('hidden');
+    // Show thumbnail and filename
+    displaySelectedVideo();
 
     updateNavButtons();
+});
+
+// Display selected video thumbnail and filename
+function displaySelectedVideo() {
+    // Show thumbnail using video element to capture frame
+    const video = document.createElement('video');
+    video.src = AppState.videoURL;
+    video.muted = true;
+    video.currentTime = 1; // Seek to 1 second for better thumbnail
+
+    video.addEventListener('loadeddata', () => {
+        // Create canvas to capture frame
+        const canvas = document.createElement('canvas');
+        canvas.width = 120;
+        canvas.height = 120;
+        const ctx = canvas.getContext('2d');
+
+        // Calculate center crop
+        const size = Math.min(video.videoWidth, video.videoHeight);
+        const x = (video.videoWidth - size) / 2;
+        const y = (video.videoHeight - size) / 2;
+
+        ctx.drawImage(video, x, y, size, size, 0, 0, 120, 120);
+
+        Elements.videoThumbnail.src = canvas.toDataURL('image/jpeg', 0.8);
+    });
+
+    video.load();
+
+    // Update filename display
+    Elements.videoFilenameEl.textContent = AppState.videoFilename;
+
+    // Show the info section
+    Elements.selectedVideoInfo.classList.remove('hidden');
+
+    // Update folder display
+    updateFolderDisplay();
+}
+
+// Update folder display
+function updateFolderDisplay() {
+    const displayPath = AppState.outputFolder + '/Klipper';
+    Elements.outputFolderDisplay.textContent = displayPath;
+
+    // Also update Step 4 output path if it exists
+    if (Elements.outputPath) {
+        Elements.outputPath.textContent = displayPath;
+    }
+}
+
+// Folder picker handler
+Elements.changeFolderBtn.addEventListener('click', async () => {
+    if (isNative() && FilePicker) {
+        try {
+            // Use directory picker if available
+            const result = await FilePicker.pickDirectory();
+            if (result && result.path) {
+                AppState.outputFolder = result.path;
+                updateFolderDisplay();
+            }
+        } catch (e) {
+            // Fallback: show preset options
+            const options = [
+                '/storage/emulated/0/Movies',
+                '/storage/emulated/0/Download',
+                '/storage/emulated/0/DCIM'
+            ];
+
+            const choice = prompt(
+                'Pilih folder output:\n' +
+                '1. Movies/Klipper\n' +
+                '2. Download/Klipper\n' +
+                '3. DCIM/Klipper\n\n' +
+                'Masukkan nomor (1-3):'
+            );
+
+            const index = parseInt(choice) - 1;
+            if (index >= 0 && index < options.length) {
+                AppState.outputFolder = options[index];
+                updateFolderDisplay();
+            }
+        }
+    } else {
+        alert('Folder picker hanya tersedia di aplikasi native.');
+    }
 });
 
 // ========================================
@@ -595,16 +684,28 @@ async function processWithFFmpeg() {
 
         const part = AppState.parts[i];
         const outputFilename = `clip_${i + 1}_${Date.now()}.mp4`;
-        // Use app's cache directory for output
+        // Use app's cache directory for temporary output
         const outputPath = `/data/data/com.klipper.app/cache/${outputFilename}`;
 
         Elements.processStatus.textContent = `Memproses Part ${i + 1}/${totalClips}...`;
 
-        // Build simple FFmpeg command (no watermark for now - needs font setup)
-        // Just do: trim video + crop to 9:16
-        // Note: crop formula = crop=out_width:out_height:x:y
-        // For 9:16 from landscape: width = height * 9/16, x = center offset
-        const command = `-y -i "${inputPath}" -ss ${part.startStr} -to ${part.endStr} -vf "crop=in_h*9/16:in_h" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${outputPath}"`;
+        // Build FFmpeg command with optional watermark
+        // Crop to 9:16 center
+        let filterComplex = 'crop=in_h*9/16:in_h';
+
+        // Add watermark if enabled (simple drawtext - uses system default font)
+        if (AppState.watermark.enabled && AppState.watermark.text) {
+            const pos = AppState.watermark.position;
+            const yPos = pos === 'top' ? 'h*0.12' : pos === 'bottom' ? 'h*0.88-th' : '(h-th)/2';
+            // Escape special characters for FFmpeg
+            const escapedText = AppState.watermark.text
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "'\\''")
+                .replace(/:/g, '\\:');
+            filterComplex += `,drawtext=text='${escapedText}':fontsize=42:fontcolor=white@0.8:x=(w-tw)/2:y=${yPos}:box=1:boxcolor=black@0.4:boxborderw=8`;
+        }
+
+        const command = `-y -i "${inputPath}" -ss ${part.startStr} -to ${part.endStr} -vf "${filterComplex}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${outputPath}"`;
 
         console.log('FFmpeg command:', command);
 
@@ -617,11 +718,12 @@ async function processWithFFmpeg() {
             if (result && result.success) {
                 console.log(`Part ${i + 1} completed in cache:`, outputPath);
 
-                // Move file from cache to Movies/Klipper
+                // Move file from cache to selected output folder + Klipper
                 Elements.processStatus.textContent = `Menyimpan Part ${i + 1}...`;
                 const moveResult = await FFmpegPlugin.moveToPublic({
                     source: outputPath,
-                    filename: outputFilename
+                    filename: outputFilename,
+                    destFolder: AppState.outputFolder + '/Klipper'
                 });
 
                 if (moveResult && moveResult.success) {

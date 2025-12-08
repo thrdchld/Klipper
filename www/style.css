@@ -797,3 +797,67 @@ button {
         width: 100%;
     }
 }
+
+/* ========================================
+   STEP 1: VIDEO SELECTION REDESIGN
+   ======================================== */
+.selected-video-info {
+    margin-top: var(--spacing-lg);
+    background: var(--bg-primary);
+    border-radius: 12px;
+    padding: var(--spacing-md);
+    box-shadow: var(--shadow-sm);
+}
+
+.video-info-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.video-thumbnail {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    object-fit: cover;
+    background: var(--bg-tertiary);
+}
+
+.video-filename {
+    font-size: var(--font-size-md);
+    font-weight: 500;
+    color: var(--text-primary);
+    word-break: break-all;
+    flex: 1;
+}
+
+.output-folder-section {
+    margin-top: var(--spacing-lg);
+    background: var(--bg-primary);
+    border-radius: 12px;
+    padding: var(--spacing-md);
+    box-shadow: var(--shadow-sm);
+}
+
+.folder-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+}
+
+.folder-path {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    word-break: break-all;
+    flex: 1;
+}
+
+.btn-small {
+    min-height: 36px;
+    padding: var(--spacing-xs) var(--spacing-md);
+    font-size: var(--font-size-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}

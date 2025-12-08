@@ -3,6 +3,7 @@ package com.klipper.app;
 import android.Manifest;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.media.MediaScannerConnection;
@@ -11,6 +12,7 @@ import android.os.Build;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+import android.provider.Settings;
 import android.util.Log;
 
 import androidx.core.app.ActivityCompat;
@@ -226,6 +228,7 @@ public class FFmpegPlugin extends Plugin {
     public void moveToPublic(PluginCall call) {
         String sourcePath = call.getString("source");
         String filename = call.getString("filename");
+        String destFolder = call.getString("destFolder");
         
         if (sourcePath == null || sourcePath.isEmpty()) {
             call.reject("Source path is required");
@@ -248,13 +251,19 @@ public class FFmpegPlugin extends Plugin {
                 return;
             }
             
-            // Create output directory
-            File moviesDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "Klipper");
-            if (!moviesDir.exists()) {
-                moviesDir.mkdirs();
+            // Create output directory (use custom folder or default to Movies/Klipper)
+            File outputDir;
+            if (destFolder != null && !destFolder.isEmpty()) {
+                outputDir = new File(destFolder);
+            } else {
+                outputDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "Klipper");
             }
             
-            File destFile = new File(moviesDir, filename);
+            if (!outputDir.exists()) {
+                outputDir.mkdirs();
+            }
+            
+            File destFile = new File(outputDir, filename);
             
             // Copy file
             InputStream input = new FileInputStream(sourceFile);
@@ -319,14 +328,54 @@ public class FFmpegPlugin extends Plugin {
     @PluginMethod
     public void requestStoragePermission(PluginCall call) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // Android 11+ - request through Capacitor's permission system
-            requestPermissionForAlias("storage", call, "storagePermissionCallback");
+            // Android 11+ - Open app settings for "All Files Access" permission
+            try {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+                getActivity().startActivity(intent);
+                
+                JSObject result = new JSObject();
+                result.put("opened", true);
+                result.put("message", "Settings opened. Please grant permission.");
+                call.resolve(result);
+            } catch (Exception e) {
+                // Fallback to general storage settings
+                try {
+                    Intent intent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                    getActivity().startActivity(intent);
+                    
+                    JSObject result = new JSObject();
+                    result.put("opened", true);
+                    call.resolve(result);
+                } catch (Exception e2) {
+                    // Last fallback - open app info
+                    openAppSettings(call);
+                }
+            }
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            // Android 6-10
+            // Android 6-10 - Use standard permission request
             requestPermissionForAlias("storage", call, "storagePermissionCallback");
         } else {
             JSObject result = new JSObject();
             result.put("granted", true);
+            call.resolve(result);
+        }
+    }
+    
+    @PluginMethod
+    public void openAppSettings(PluginCall call) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+            getActivity().startActivity(intent);
+            
+            JSObject result = new JSObject();
+            result.put("opened", true);
+            call.resolve(result);
+        } catch (Exception e) {
+            JSObject result = new JSObject();
+            result.put("opened", false);
+            result.put("error", e.getMessage());
             call.resolve(result);
         }
     }
