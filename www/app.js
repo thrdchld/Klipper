@@ -13,7 +13,7 @@ const isNative = () => {
 };
 
 // Initialize Capacitor plugins when available
-function initCapacitorPlugins() {
+async function initCapacitorPlugins() {
     if (window.Capacitor) {
         Capacitor = window.Capacitor;
         const Plugins = Capacitor.Plugins;
@@ -28,13 +28,39 @@ function initCapacitorPlugins() {
             FFmpegPlugin: !!FFmpegPlugin
         });
 
-        // Debug alert for testing
-        alert('Mode: ' + (Capacitor.isNativePlatform() ? 'NATIVE' : 'WEB') +
-            '\nFFmpegPlugin: ' + (FFmpegPlugin ? 'Loaded' : 'Not Found') +
-            '\nFilePicker: ' + (FilePicker ? 'Loaded' : 'Not Found'));
+        // Check and request storage permission on native platform
+        if (Capacitor.isNativePlatform() && FFmpegPlugin) {
+            await checkAndRequestStoragePermission();
+        }
     } else {
         console.log('Running in web mode - native plugins not available');
-        alert('Web Mode - Capacitor not detected');
+    }
+}
+
+// Check storage permission and request if not granted
+async function checkAndRequestStoragePermission() {
+    try {
+        const status = await FFmpegPlugin.checkStoragePermission();
+        console.log('Storage permission status:', status);
+
+        if (!status.granted) {
+            // Show explanation to user
+            const userConfirm = confirm(
+                'Klipper membutuhkan izin akses penyimpanan untuk menyimpan video hasil potongan ke folder Movies.\n\n' +
+                'Tekan OK untuk memberikan izin.'
+            );
+
+            if (userConfirm) {
+                const result = await FFmpegPlugin.requestStoragePermission();
+                console.log('Permission request result:', result);
+
+                if (!result.granted) {
+                    alert('Izin penyimpanan ditolak. Video akan disimpan di cache saja.');
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Permission check error:', e);
     }
 }
 
@@ -581,36 +607,42 @@ async function processWithFFmpeg() {
         const command = `-y -i "${inputPath}" -ss ${part.startStr} -to ${part.endStr} -vf "crop=in_h*9/16:in_h" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${outputPath}"`;
 
         console.log('FFmpeg command:', command);
-        alert('FFmpeg cmd:\\n' + command);
 
         try {
-            Elements.processStatus.textContent = `Processing Part ${i + 1}...`;
+            Elements.processStatus.textContent = `Memproses Part ${i + 1}/${totalClips}...`;
             const result = await FFmpegPlugin.execute({ command: command });
 
             console.log('FFmpeg result:', result);
 
             if (result && result.success) {
-                console.log(`Part ${i + 1} completed:`, outputPath);
-                alert('Part ' + (i + 1) + ' SUCCESS!\\nOutput: ' + outputPath);
+                console.log(`Part ${i + 1} completed in cache:`, outputPath);
+
+                // Move file from cache to Movies/Klipper
+                Elements.processStatus.textContent = `Menyimpan Part ${i + 1}...`;
+                const moveResult = await FFmpegPlugin.moveToPublic({
+                    source: outputPath,
+                    filename: outputFilename
+                });
+
+                if (moveResult && moveResult.success) {
+                    console.log(`Part ${i + 1} saved to:`, moveResult.path);
+                } else {
+                    console.warn(`Part ${i + 1} move failed:`, moveResult?.error);
+                    // File remains in cache, not critical error
+                }
             } else {
                 const errMsg = result ? result.error : 'No result';
-                const logs = result ? result.logs : '';
                 const retCode = result ? result.returnCode : 'N/A';
 
                 console.error(`Part ${i + 1} failed:`, errMsg);
-                console.error('Return code:', retCode);
-                console.error('Logs:', logs);
+                Elements.processStatus.textContent = `Error Part ${i + 1}`;
 
-                Elements.processStatus.textContent = `Error (code ${retCode})`;
-
-                // Show last part of error
-                const shortErr = errMsg.length > 300 ? '...' + errMsg.slice(-300) : errMsg;
-                alert('FFmpeg Error (code ' + retCode + '):\\n' + shortErr);
+                // Show error briefly
+                alert(`Part ${i + 1} gagal (code ${retCode})`);
             }
         } catch (e) {
             console.error('FFmpeg error:', e);
             Elements.processStatus.textContent = `Error: ${e.message}`;
-            alert('FFmpeg Exception: ' + e.message);
         }
 
         // Update progress
