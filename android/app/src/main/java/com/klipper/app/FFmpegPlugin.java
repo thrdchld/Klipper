@@ -106,33 +106,56 @@ public class FFmpegPlugin extends Plugin {
     
     @PluginMethod
     public void showProgressNotification(PluginCall call) {
-        int progress = call.getInt("progress", 0);
-        int current = call.getInt("current", 0);
-        int total = call.getInt("total", 0);
-        
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(getContext(), CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_menu_save)
-            .setContentTitle("Memproses Video")
-            .setContentText("Part " + current + "/" + total)
-            .setProgress(100, progress, false)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW);
-        
-        notificationManager.notify(NOTIFICATION_ID, builder.build());
-        
-        JSObject result = new JSObject();
-        result.put("success", true);
-        call.resolve(result);
+        try {
+            if (notificationManager == null) {
+                createNotificationChannel();
+            }
+            
+            int progress = call.getInt("progress", 0);
+            int current = call.getInt("current", 0);
+            int total = call.getInt("total", 0);
+            
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(getContext(), CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_menu_save)
+                .setContentTitle("Memproses Video")
+                .setContentText("Part " + current + "/" + total)
+                .setProgress(100, progress, false)
+                .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW);
+            
+            if (notificationManager != null) {
+                notificationManager.notify(NOTIFICATION_ID, builder.build());
+            }
+            
+            JSObject result = new JSObject();
+            result.put("success", true);
+            call.resolve(result);
+        } catch (Exception e) {
+            Log.e(TAG, "Error showing notification", e);
+            JSObject result = new JSObject();
+            result.put("success", false);
+            result.put("error", e.getMessage());
+            call.resolve(result);
+        }
     }
     
     @PluginMethod
     public void hideProgressNotification(PluginCall call) {
-        notificationManager.cancel(NOTIFICATION_ID);
-        releaseWakeLock();
-        
-        JSObject result = new JSObject();
-        result.put("success", true);
-        call.resolve(result);
+        try {
+            if (notificationManager != null) {
+                notificationManager.cancel(NOTIFICATION_ID);
+            }
+            releaseWakeLock();
+            
+            JSObject result = new JSObject();
+            result.put("success", true);
+            call.resolve(result);
+        } catch (Exception e) {
+            Log.e(TAG, "Error hiding notification", e);
+            JSObject result = new JSObject();
+            result.put("success", false);
+            call.resolve(result);
+        }
     }
     
     @PluginMethod
