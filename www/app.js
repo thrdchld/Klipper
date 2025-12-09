@@ -31,6 +31,17 @@ async function initCapacitorPlugins() {
         // Check and request storage permission on native platform
         if (Capacitor.isNativePlatform() && FFmpegPlugin) {
             await checkAndRequestStoragePermission();
+
+            // Get font path for watermark
+            try {
+                const fontResult = await FFmpegPlugin.getFontPath();
+                if (fontResult.success) {
+                    AppState.watermark.fontPath = fontResult.path;
+                    console.log('Font path:', fontResult.path);
+                }
+            } catch (e) {
+                console.warn('Could not get font path:', e);
+            }
         }
     } else {
         console.log('Running in web mode - native plugins not available');
@@ -83,7 +94,8 @@ const AppState = {
     watermark: {
         enabled: false,
         text: localStorage.getItem('watermarkText') || '',
-        position: 'center'
+        position: 'center',
+        fontPath: null  // Set by getFontPath() at runtime
     },
     processing: {
         isRunning: false,
@@ -681,19 +693,23 @@ async function processWithFFmpeg() {
 
         Elements.processStatus.textContent = `Memproses Part ${i + 1}/${totalClips}...`;
 
-        // Build FFmpeg command - TEMPORARILY SKIP WATERMARK for debugging
-        // Just crop to 9:16 center
+        // Build FFmpeg command with crop and optional watermark
         let filterComplex = 'crop=in_h*9/16:in_h';
 
-        // TODO: Re-enable watermark after basic processing works
-        // Watermark temporarily disabled to debug FFmpeg code 1 error
+        // Add watermark if enabled AND font is available
+        if (AppState.watermark.enabled && AppState.watermark.text && AppState.watermark.fontPath) {
+            const pos = AppState.watermark.position;
+            const yPos = pos === 'top' ? 'h*0.10' : pos === 'bottom' ? 'h*0.90-th' : '(h-th)/2';
+            // Clean text - remove characters that break FFmpeg
+            const safeText = AppState.watermark.text.replace(/['":\\]/g, '');
+            const fontPath = AppState.watermark.fontPath.replace(/:/g, '\\:');
+            // Draw text with Roboto font
+            filterComplex += `,drawtext=fontfile='${fontPath}':text='${safeText}':fontsize=40:fontcolor=white:x=(w-tw)/2:y=${yPos}:shadowcolor=black:shadowx=2:shadowy=2`;
+        }
 
         const command = `-y -i "${inputPath}" -ss ${part.startStr} -to ${part.endStr} -vf "${filterComplex}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${outputPath}"`;
 
         console.log('FFmpeg command:', command);
-
-        // Debug: Show command before execution
-        alert('Input: ' + inputPath + '\nOutput: ' + outputPath + '\nTimestamp: ' + part.startStr + ' - ' + part.endStr);
 
         try {
             Elements.processStatus.textContent = `Memproses Part ${i + 1}/${totalClips}...`;

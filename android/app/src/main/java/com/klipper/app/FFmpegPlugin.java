@@ -388,4 +388,40 @@ public class FFmpegPlugin extends Plugin {
         result.put("granted", granted);
         call.resolve(result);
     }
+    
+    @PluginMethod
+    public void getFontPath(PluginCall call) {
+        try {
+            // Copy font from assets to cache if not already there
+            File cacheDir = getContext().getCacheDir();
+            File fontFile = new File(cacheDir, "Roboto-Regular.ttf");
+            
+            if (!fontFile.exists()) {
+                // Copy from assets
+                InputStream is = getContext().getAssets().open("fonts/Roboto-Regular.ttf");
+                OutputStream os = new FileOutputStream(fontFile);
+                
+                byte[] buffer = new byte[4096];
+                int bytesRead;
+                while ((bytesRead = is.read(buffer)) != -1) {
+                    os.write(buffer, 0, bytesRead);
+                }
+                
+                os.close();
+                is.close();
+                Log.d(TAG, "Font copied to: " + fontFile.getAbsolutePath());
+            }
+            
+            JSObject result = new JSObject();
+            result.put("path", fontFile.getAbsolutePath());
+            result.put("success", true);
+            call.resolve(result);
+        } catch (Exception e) {
+            Log.e(TAG, "Error getting font path", e);
+            JSObject result = new JSObject();
+            result.put("success", false);
+            result.put("error", e.getMessage());
+            call.resolve(result);
+        }
+    }
 }
