@@ -1,8 +1,11 @@
 package com.klipper.app;
 
 import android.Manifest;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
@@ -10,12 +13,14 @@ import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
+import android.os.PowerManager;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.util.Log;
 
 import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 
 import java.io.File;
@@ -54,6 +59,90 @@ public class FFmpegPlugin extends Plugin {
     
     private static final String TAG = "FFmpegPlugin";
     private static final int PERMISSION_REQUEST_CODE = 1001;
+    private static final String CHANNEL_ID = "klipper_processing";
+    private static final int NOTIFICATION_ID = 1;
+    
+    private PowerManager.WakeLock wakeLock;
+    private NotificationManager notificationManager;
+    
+    @Override
+    public void load() {
+        super.load();
+        createNotificationChannel();
+    }
+    
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            CharSequence name = "Klipper Processing";
+            String description = "Shows progress while processing videos";
+            int importance = NotificationManager.IMPORTANCE_LOW;
+            NotificationChannel channel = new NotificationChannel(CHANNEL_ID, name, importance);
+            channel.setDescription(description);
+            
+            notificationManager = getContext().getSystemService(NotificationManager.class);
+            notificationManager.createNotificationChannel(channel);
+        } else {
+            notificationManager = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+        }
+    }
+    
+    private void acquireWakeLock() {
+        if (wakeLock == null) {
+            PowerManager powerManager = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Klipper::ProcessingWakeLock");
+        }
+        if (!wakeLock.isHeld()) {
+            wakeLock.acquire(60 * 60 * 1000L); // 1 hour max
+            Log.d(TAG, "WakeLock acquired");
+        }
+    }
+    
+    private void releaseWakeLock() {
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release();
+            Log.d(TAG, "WakeLock released");
+        }
+    }
+    
+    @PluginMethod
+    public void showProgressNotification(PluginCall call) {
+        int progress = call.getInt("progress", 0);
+        int current = call.getInt("current", 0);
+        int total = call.getInt("total", 0);
+        
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(getContext(), CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_menu_save)
+            .setContentTitle("Memproses Video")
+            .setContentText("Part " + current + "/" + total)
+            .setProgress(100, progress, false)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW);
+        
+        notificationManager.notify(NOTIFICATION_ID, builder.build());
+        
+        JSObject result = new JSObject();
+        result.put("success", true);
+        call.resolve(result);
+    }
+    
+    @PluginMethod
+    public void hideProgressNotification(PluginCall call) {
+        notificationManager.cancel(NOTIFICATION_ID);
+        releaseWakeLock();
+        
+        JSObject result = new JSObject();
+        result.put("success", true);
+        call.resolve(result);
+    }
+    
+    @PluginMethod
+    public void startProcessing(PluginCall call) {
+        acquireWakeLock();
+        
+        JSObject result = new JSObject();
+        result.put("success", true);
+        call.resolve(result);
+    }
     
     @PluginMethod
     public void copyToCache(PluginCall call) {

@@ -91,6 +91,7 @@ const AppState = {
     videoFilename: '',
     outputFolder: '/storage/emulated/0/Movies',  // Parent folder (Klipper will be added)
     parts: [],
+    selectedPartIndex: 0,  // Currently selected part for preview
     watermark: {
         enabled: false,
         text: localStorage.getItem('watermarkText') || '',
@@ -133,6 +134,17 @@ const Elements = {
     watermarkText: document.getElementById('watermarkText'),
     watermarkPosition: document.getElementById('watermarkPosition'),
     partsList: document.getElementById('partsList'),
+
+    // Video Controls (Step 3)
+    videoTimeline: document.getElementById('videoTimeline'),
+    currentTimeDisplay: document.getElementById('currentTime'),
+    totalTimeDisplay: document.getElementById('totalTime'),
+    playPauseBtn: document.getElementById('playPauseBtn'),
+    playIcon: document.getElementById('playIcon'),
+    pauseIcon: document.getElementById('pauseIcon'),
+    stopBtn: document.getElementById('stopBtn'),
+    skipBackward: document.getElementById('skipBackward'),
+    skipForward: document.getElementById('skipForward'),
 
     // Step 4
     progressBar: document.getElementById('progressFill'),
@@ -182,8 +194,29 @@ function goToStep(step) {
     if (step === 3) {
         if (AppState.videoURL) {
             Elements.videoPreview3.src = AppState.videoURL;
+
+            // Wait for video metadata to load
+            Elements.videoPreview3.onloadedmetadata = () => {
+                // Initialize timeline
+                const duration = Elements.videoPreview3.duration;
+                Elements.videoTimeline.max = duration;
+                Elements.totalTimeDisplay.textContent = formatTime(duration);
+
+                // Auto-select Part 1 if parts exist
+                if (AppState.parts.length > 0) {
+                    AppState.selectedPartIndex = 0;
+                    highlightSelectedPart();
+
+                    // Seek to Part 1 start time (but don't play)
+                    const startSeconds = timestampToSeconds(AppState.parts[0].startStr);
+                    Elements.videoPreview3.currentTime = startSeconds;
+                    Elements.videoTimeline.value = startSeconds;
+                    Elements.currentTimeDisplay.textContent = formatTime(startSeconds);
+                }
+            };
         }
         updateWatermarkDisplay();
+        initVideoControls();
     }
 
     if (step === 4) {
@@ -213,6 +246,100 @@ function updateNavButtons() {
         Elements.nextBtn.classList.remove('hidden');
         updateProcessButtonState();
     }
+}
+
+// ========================================
+// VIDEO CONTROLS (Step 3)
+// ========================================
+function formatTime(seconds) {
+    if (isNaN(seconds) || !isFinite(seconds)) return '00:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+function timestampToSeconds(timestamp) {
+    const parts = timestamp.split(':').map(p => parseInt(p, 10));
+    if (parts.length === 2) {
+        return parts[0] * 60 + parts[1]; // MM:SS
+    } else if (parts.length === 3) {
+        return parts[0] * 3600 + parts[1] * 60 + parts[2]; // HH:MM:SS
+    }
+    return 0;
+}
+
+function highlightSelectedPart() {
+    const partItems = document.querySelectorAll('.part-item');
+    partItems.forEach((item, index) => {
+        item.classList.toggle('selected', index === AppState.selectedPartIndex);
+    });
+}
+
+let videoControlsInitialized = false;
+
+function initVideoControls() {
+    if (videoControlsInitialized) return;
+    videoControlsInitialized = true;
+
+    const video = Elements.videoPreview3;
+
+    // Timeline scrubbing
+    Elements.videoTimeline.addEventListener('input', (e) => {
+        video.currentTime = parseFloat(e.target.value);
+    });
+
+    // Update timeline and time display on video timeupdate
+    video.addEventListener('timeupdate', () => {
+        Elements.videoTimeline.value = video.currentTime;
+        Elements.currentTimeDisplay.textContent = formatTime(video.currentTime);
+    });
+
+    // Update total duration when video loads
+    video.addEventListener('loadedmetadata', () => {
+        Elements.videoTimeline.max = video.duration;
+        Elements.totalTimeDisplay.textContent = formatTime(video.duration);
+    });
+
+    // Play/Pause button
+    Elements.playPauseBtn.addEventListener('click', () => {
+        if (video.paused) {
+            video.play();
+        } else {
+            video.pause();
+        }
+    });
+
+    // Sync play/pause icons when video plays/pauses
+    video.addEventListener('play', () => {
+        Elements.playIcon.classList.add('hidden');
+        Elements.pauseIcon.classList.remove('hidden');
+    });
+
+    video.addEventListener('pause', () => {
+        Elements.playIcon.classList.remove('hidden');
+        Elements.pauseIcon.classList.add('hidden');
+    });
+
+    // Stop button - pause and seek to current part start or beginning
+    Elements.stopBtn.addEventListener('click', () => {
+        video.pause();
+        if (AppState.selectedPartIndex !== undefined && AppState.parts.length > 0) {
+            const startSeconds = timestampToSeconds(AppState.parts[AppState.selectedPartIndex].startStr);
+            video.currentTime = startSeconds;
+        } else {
+            video.currentTime = 0;
+        }
+    });
+
+    // Skip backward 5 seconds
+    Elements.skipBackward.addEventListener('click', () => {
+        video.currentTime = Math.max(0, video.currentTime - 5);
+    });
+
+    // Skip forward 5 seconds
+    Elements.skipForward.addEventListener('click', () => {
+        video.currentTime = Math.min(video.duration, video.currentTime + 5);
+    });
 }
 
 // ========================================
@@ -674,16 +801,34 @@ async function processWithFFmpeg() {
         }
     }
 
-    // Debug: show video path
-    alert('Starting FFmpeg\\nInput: ' + inputPath + '\\nParts: ' + totalClips);
     console.log('Input video path:', inputPath);
+
+    // Start background processing (acquire WakeLock)
+    try {
+        await FFmpegPlugin.startProcessing();
+    } catch (e) {
+        console.warn('Could not start background processing:', e);
+    }
 
     Elements.processStatus.textContent = 'Memproses...';
 
     for (let i = 0; i < totalClips; i++) {
         if (!AppState.processing.isRunning) {
             Elements.processStatus.textContent = 'Dibatalkan';
+            // Hide notification when cancelled
+            try { await FFmpegPlugin.hideProgressNotification(); } catch (e) { }
             return;
+        }
+
+        // Update notification with progress
+        try {
+            await FFmpegPlugin.showProgressNotification({
+                progress: Math.round((i / totalClips) * 100),
+                current: i + 1,
+                total: totalClips
+            });
+        } catch (e) {
+            console.warn('Could not update notification:', e);
         }
 
         const part = AppState.parts[i];
@@ -699,12 +844,13 @@ async function processWithFFmpeg() {
         // Add watermark if enabled AND font is available
         if (AppState.watermark.enabled && AppState.watermark.text && AppState.watermark.fontPath) {
             const pos = AppState.watermark.position;
-            const yPos = pos === 'top' ? 'h*0.10' : pos === 'bottom' ? 'h*0.90-th' : '(h-th)/2';
+            // Match CSS positions: top=15%, center=50%, bottom=85%
+            const yPos = pos === 'top' ? 'h*0.15' : pos === 'bottom' ? 'h*0.85-th' : '(h-th)/2';
             // Clean text - remove characters that break FFmpeg
             const safeText = AppState.watermark.text.replace(/['":\\]/g, '');
             const fontPath = AppState.watermark.fontPath.replace(/:/g, '\\:');
-            // Draw text with Roboto font
-            filterComplex += `,drawtext=fontfile='${fontPath}':text='${safeText}':fontsize=40:fontcolor=white:x=(w-tw)/2:y=${yPos}:shadowcolor=black:shadowx=2:shadowy=2`;
+            // Draw text with black box background matching CSS (box=1, boxcolor=black@0.4)
+            filterComplex += `,drawtext=fontfile='${fontPath}':text='${safeText}':fontsize=40:fontcolor=white:x=(w-tw)/2:y=${yPos}:box=1:boxcolor=black@0.4:boxborderw=8:shadowcolor=black@0.8:shadowx=1:shadowy=1`;
         }
 
         const command = `-y -i "${inputPath}" -ss ${part.startStr} -to ${part.endStr} -vf "${filterComplex}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${outputPath}"`;
@@ -796,7 +942,14 @@ function simulateProcessing() {
 function finishProcessing() {
     AppState.processing.isRunning = false;
     updateProcessButtonState();
-    Elements.processStatus.textContent = 'Selesai! Cek folder ' + OUTPUT_DIR;
+    Elements.processStatus.textContent = 'Selesai! Cek folder ' + AppState.outputFolder + '/Klipper';
+
+    // Hide notification and release WakeLock
+    try {
+        FFmpegPlugin.hideProgressNotification();
+    } catch (e) {
+        console.warn('Could not hide notification:', e);
+    }
 }
 
 function showCancelConfirmation() {

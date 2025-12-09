@@ -861,3 +861,98 @@ button {
     align-items: center;
     gap: var(--spacing-xs);
 }
+
+/* ========================================
+   VIDEO CONTROLS (Step 3)
+   ======================================== */
+.video-controls {
+    margin-top: var(--spacing-md);
+    background: var(--bg-primary);
+    border-radius: 12px;
+    padding: var(--spacing-md);
+    box-shadow: var(--shadow-sm);
+    max-width: 280px;
+}
+
+.timeline-slider {
+    width: 100%;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    outline: none;
+    margin-bottom: var(--spacing-sm);
+}
+
+.timeline-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--primary-color);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+.timeline-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+.timeline-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: var(--primary-color);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+.video-time-display {
+    text-align: center;
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    font-family: 'Courier New', monospace;
+    margin-bottom: var(--spacing-sm);
+}
+
+.control-buttons {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.control-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.control-btn:hover {
+    background: var(--bg-tertiary);
+}
+
+.control-btn:active {
+    transform: scale(0.95);
+}
+
+.control-btn.play-pause {
+    width: 48px;
+    height: 48px;
+    background: var(--primary-color);
+    color: white;
+}
+
+.control-btn.play-pause:hover {
+    background: var(--primary-dark);
+}

@@ -81,6 +81,40 @@
                             <video id="videoPreview3" class="video-element"></video>
                             <div id="watermarkOverlay3" class="watermark-overlay hidden"></div>
                         </div>
+
+                        <!-- Video Controls -->
+                        <div class="video-controls">
+                            <input type="range" id="videoTimeline" class="timeline-slider" min="0" max="100" value="0">
+                            <div class="video-time-display">
+                                <span id="currentTime">00:00</span> / <span id="totalTime">00:00</span>
+                            </div>
+                            <div class="control-buttons">
+                                <button id="skipBackward" class="control-btn" title="-5 detik">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z" />
+                                    </svg>
+                                </button>
+                                <button id="playPauseBtn" class="control-btn play-pause" title="Play/Pause">
+                                    <svg id="playIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M8 5v14l11-7z" />
+                                    </svg>
+                                    <svg id="pauseIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"
+                                        class="hidden">
+                                        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                                    </svg>
+                                </button>
+                                <button id="stopBtn" class="control-btn" title="Stop">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M6 6h12v12H6z" />
+                                    </svg>
+                                </button>
+                                <button id="skipForward" class="control-btn" title="+5 detik">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Watermark Panel -->
