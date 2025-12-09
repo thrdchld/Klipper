@@ -803,32 +803,15 @@ async function processWithFFmpeg() {
 
     console.log('Input video path:', inputPath);
 
-    // Start background processing (acquire WakeLock)
-    try {
-        await FFmpegPlugin.startProcessing();
-    } catch (e) {
-        console.warn('Could not start background processing:', e);
-    }
+    // NOTE: Background processing (WakeLock/notification) disabled temporarily
+    // These were causing crashes. Will be re-implemented after stability is confirmed.
 
     Elements.processStatus.textContent = 'Memproses...';
 
     for (let i = 0; i < totalClips; i++) {
         if (!AppState.processing.isRunning) {
             Elements.processStatus.textContent = 'Dibatalkan';
-            // Hide notification when cancelled
-            try { await FFmpegPlugin.hideProgressNotification(); } catch (e) { }
             return;
-        }
-
-        // Update notification with progress
-        try {
-            await FFmpegPlugin.showProgressNotification({
-                progress: Math.round((i / totalClips) * 100),
-                current: i + 1,
-                total: totalClips
-            });
-        } catch (e) {
-            console.warn('Could not update notification:', e);
         }
 
         const part = AppState.parts[i];
