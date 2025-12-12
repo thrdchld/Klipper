@@ -300,6 +300,16 @@ function initVideoControls() {
     video.addEventListener('timeupdate', () => {
         Elements.videoTimeline.value = video.currentTime;
         Elements.currentTimeDisplay.textContent = formatTime(video.currentTime);
+
+        // Auto-stop at selected part's end timestamp
+        if (AppState.selectedPartIndex !== undefined && AppState.parts.length > 0) {
+            const part = AppState.parts[AppState.selectedPartIndex];
+            const endSeconds = timestampToSeconds(part.endStr);
+            if (video.currentTime >= endSeconds) {
+                video.pause();
+                video.currentTime = endSeconds; // Snap to exact end
+            }
+        }
     });
 
     // Update total duration when video loads
@@ -571,24 +581,28 @@ function renderPartsList() {
     AppState.parts.forEach((part, index) => {
         const partItem = document.createElement('div');
         partItem.className = 'part-item';
+        if (index === AppState.selectedPartIndex) {
+            partItem.classList.add('selected');
+        }
+
         partItem.innerHTML = `
             <div class="part-info">
                 <div class="part-number">Part ${index + 1}</div>
                 <div class="part-time">${part.startStr} - ${part.endStr}</div>
             </div>
             <div class="part-actions">
-                <button class="part-btn" onclick="previewPart(${part.id})">
+                <button class="part-btn" data-action="preview" data-index="${index}">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polygon points="5 3 19 12 5 21 5 3"/>
                     </svg>
                 </button>
-                <button class="part-btn" onclick="editPart(${part.id})">
+                <button class="part-btn" data-action="edit" data-id="${part.id}">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                     </svg>
                 </button>
-                <button class="part-btn danger" onclick="deletePart(${part.id})">
+                <button class="part-btn danger" data-action="delete" data-id="${part.id}">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="3 6 5 6 21 6"/>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -597,15 +611,53 @@ function renderPartsList() {
             </div>
         `;
 
+        // Click on part-info to select this part (without playing)
+        partItem.querySelector('.part-info').addEventListener('click', () => {
+            selectPart(index);
+        });
+
+        // Button actions
+        partItem.querySelectorAll('[data-action]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const action = btn.dataset.action;
+                if (action === 'preview') {
+                    selectPart(parseInt(btn.dataset.index), true);
+                } else if (action === 'edit') {
+                    editPart(parseInt(btn.dataset.id));
+                } else if (action === 'delete') {
+                    deletePart(parseInt(btn.dataset.id));
+                }
+            });
+        });
+
         Elements.partsList.appendChild(partItem);
     });
 }
 
-function previewPart(partId) {
-    const part = AppState.parts.find(p => p.id === partId);
-    if (part) {
-        Elements.videoPreview3.currentTime = part.start;
+// Select a part: update selectedPartIndex, seek to start, optionally play
+function selectPart(index, andPlay = false) {
+    if (index < 0 || index >= AppState.parts.length) return;
+
+    AppState.selectedPartIndex = index;
+    highlightSelectedPart();
+
+    const part = AppState.parts[index];
+    const startSeconds = timestampToSeconds(part.startStr);
+
+    Elements.videoPreview3.currentTime = startSeconds;
+    Elements.videoTimeline.value = startSeconds;
+    Elements.currentTimeDisplay.textContent = formatTime(startSeconds);
+
+    if (andPlay) {
         Elements.videoPreview3.play();
+    }
+}
+
+function previewPart(partId) {
+    const index = AppState.parts.findIndex(p => p.id === partId);
+    if (index >= 0) {
+        selectPart(index, true);
     }
 }
 
@@ -849,17 +901,11 @@ async function processWithFFmpeg() {
         // Build FFmpeg command with crop and optional watermark
         let filterComplex = 'crop=in_h*9/16:in_h';
 
-        // Add watermark if enabled AND font is available
-        if (AppState.watermark.enabled && AppState.watermark.text && AppState.watermark.fontPath) {
-            const pos = AppState.watermark.position;
-            // Match CSS positions: top=15%, center=50%, bottom=85%
-            const yPos = pos === 'top' ? 'h*0.15' : pos === 'bottom' ? 'h*0.85-th' : '(h-th)/2';
-            // Clean text - remove characters that break FFmpeg
-            const safeText = AppState.watermark.text.replace(/['":\\]/g, '');
-            const fontPath = AppState.watermark.fontPath.replace(/:/g, '\\:');
-            // Draw text with black box background matching CSS (box=1, boxcolor=black@0.4)
-            filterComplex += `,drawtext=fontfile='${fontPath}':text='${safeText}':fontsize=40:fontcolor=white:x=(w-tw)/2:y=${yPos}:box=1:boxcolor=black@0.4:boxborderw=8:shadowcolor=black@0.8:shadowx=1:shadowy=1`;
-        }
+        // TODO: Watermark disabled - drawtext filter causing FFmpeg code 1
+        // Will investigate proper FFmpeg-kit compatible syntax
+        // if (AppState.watermark.enabled && AppState.watermark.text && AppState.watermark.fontPath) {
+        //     ... drawtext code here ...
+        // }
 
         const command = `-y -i "${inputPath}" -ss ${part.startStr} -to ${part.endStr} -vf "${filterComplex}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${outputPath}"`;
 
