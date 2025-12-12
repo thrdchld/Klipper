@@ -28,9 +28,6 @@ repositories {
     flatDir{
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
     }
-    maven {
-        url "https://artifactory.appodeal.com/appodeal-public"
-    }
 }
 
 dependencies {
