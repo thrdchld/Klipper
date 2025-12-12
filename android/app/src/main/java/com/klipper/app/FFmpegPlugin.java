@@ -168,6 +168,31 @@ public class FFmpegPlugin extends Plugin {
     }
     
     @PluginMethod
+    public void requestNotificationPermission(PluginCall call) {
+        // Android 13+ (TIRAMISU) requires runtime permission for notifications
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(getContext(), 
+                    android.Manifest.permission.POST_NOTIFICATIONS) 
+                    != PackageManager.PERMISSION_GRANTED) {
+                // Request permission
+                ActivityCompat.requestPermissions(
+                    getActivity(),
+                    new String[]{android.Manifest.permission.POST_NOTIFICATIONS},
+                    2001
+                );
+                JSObject result = new JSObject();
+                result.put("requested", true);
+                call.resolve(result);
+                return;
+            }
+        }
+        // Permission already granted or not required
+        JSObject result = new JSObject();
+        result.put("granted", true);
+        call.resolve(result);
+    }
+    
+    @PluginMethod
     public void copyToCache(PluginCall call) {
         String contentUri = call.getString("uri");
         

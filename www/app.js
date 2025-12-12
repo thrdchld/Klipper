@@ -32,6 +32,14 @@ async function initCapacitorPlugins() {
         if (Capacitor.isNativePlatform() && FFmpegPlugin) {
             await checkAndRequestStoragePermission();
 
+            // Request notification permission (Android 13+)
+            try {
+                await FFmpegPlugin.requestNotificationPermission();
+                console.log('Notification permission requested');
+            } catch (e) {
+                console.warn('Could not request notification permission:', e);
+            }
+
             // Get font path for watermark
             try {
                 const fontResult = await FFmpegPlugin.getFontPath();
@@ -803,15 +811,32 @@ async function processWithFFmpeg() {
 
     console.log('Input video path:', inputPath);
 
-    // NOTE: Background processing (WakeLock/notification) disabled temporarily
-    // These were causing crashes. Will be re-implemented after stability is confirmed.
+    // Start background processing (acquire WakeLock to prevent sleep)
+    try {
+        await FFmpegPlugin.startProcessing();
+        console.log('WakeLock acquired for background processing');
+    } catch (e) {
+        console.warn('Could not start background processing:', e);
+    }
 
     Elements.processStatus.textContent = 'Memproses...';
 
     for (let i = 0; i < totalClips; i++) {
         if (!AppState.processing.isRunning) {
             Elements.processStatus.textContent = 'Dibatalkan';
+            try { await FFmpegPlugin.hideProgressNotification(); } catch (e) { }
             return;
+        }
+
+        // Update notification with progress
+        try {
+            await FFmpegPlugin.showProgressNotification({
+                progress: Math.round(((i + 1) / totalClips) * 100),
+                current: i + 1,
+                total: totalClips
+            });
+        } catch (e) {
+            // Notification may fail silently, continue processing
         }
 
         const part = AppState.parts[i];
