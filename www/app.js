@@ -301,13 +301,13 @@ function initVideoControls() {
         Elements.videoTimeline.value = video.currentTime;
         Elements.currentTimeDisplay.textContent = formatTime(video.currentTime);
 
-        // Auto-stop at selected part's end timestamp
-        if (AppState.selectedPartIndex !== undefined && AppState.parts.length > 0) {
+        // Auto-stop at selected part's end timestamp (only when playing)
+        if (!video.paused && AppState.selectedPartIndex !== undefined && AppState.parts.length > 0) {
             const part = AppState.parts[AppState.selectedPartIndex];
             const endSeconds = timestampToSeconds(part.endStr);
-            if (video.currentTime >= endSeconds) {
+            if (video.currentTime >= endSeconds - 0.1) { // Small buffer to prevent overshoot
                 video.pause();
-                video.currentTime = endSeconds; // Snap to exact end
+                // Don't set currentTime here - it would trigger another timeupdate
             }
         }
     });
@@ -898,16 +898,17 @@ async function processWithFFmpeg() {
 
         Elements.processStatus.textContent = `Memproses Part ${i + 1}/${totalClips}...`;
 
-        // Build FFmpeg command with crop and optional watermark
-        let filterComplex = 'crop=in_h*9/16:in_h';
+        // Build FFmpeg command - simple crop to 9:16 aspect ratio
+        // Using simpler crop syntax that's more compatible
+        const filterComplex = 'crop=ih*9/16:ih';
 
-        // TODO: Watermark disabled - drawtext filter causing FFmpeg code 1
-        // Will investigate proper FFmpeg-kit compatible syntax
-        // if (AppState.watermark.enabled && AppState.watermark.text && AppState.watermark.fontPath) {
-        //     ... drawtext code here ...
-        // }
+        // Calculate duration from start to end
+        const startSeconds = timestampToSeconds(part.startStr);
+        const endSeconds = timestampToSeconds(part.endStr);
+        const duration = endSeconds - startSeconds;
 
-        const command = `-y -i "${inputPath}" -ss ${part.startStr} -to ${part.endStr} -vf "${filterComplex}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${outputPath}"`;
+        // Use -t duration instead of -to for better compatibility
+        const command = `-y -ss ${startSeconds} -i ${inputPath} -t ${duration} -vf ${filterComplex} -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k ${outputPath}`;
 
         console.log('FFmpeg command:', command);
 
