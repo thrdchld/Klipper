@@ -37,8 +37,8 @@ dependencies {
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
     
-    // FFmpeg-kit for video processing (from Appodeal artifactory)
-    implementation 'com.arthenica:ffmpeg-kit-full-gpl:6.0-2.LTS'
+    // FFmpeg-kit for video processing (local AAR file in libs folder)
+    implementation(name: 'ffmpeg-kit-full-gpl-6.0-2.LTS', ext: 'aar')
     
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"

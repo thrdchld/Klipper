@@ -1,0 +1,116 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.arthenica",
+    "module": "ffmpeg-kit-full-gpl",
+    "version": "6.0-2.LTS",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.3"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "com.arthenica",
+          "module": "smart-exception-java",
+          "version": {
+            "requires": "0.2.1"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "ffmpeg-kit-full-gpl-6.0-2.LTS.aar",
+          "url": "ffmpeg-kit-full-gpl-6.0-2.LTS.aar",
+          "size": 73596401,
+          "sha512": "e4ed759e0eb47b2bf7140b24b06d36b4aae9762842b2500569e6fc19a7d3c3ba05d001d0d99884564b8919f650c66f6ba3688f6888c82c4bb2672cc286cdc29a",
+          "sha256": "2ec56561ec593c4c4ff3b3c892b49f271699ac01f09d0f0249a7c8952a44554a",
+          "sha1": "17c94c4356a924e2643b5aab5efea4e7a0b2eb29",
+          "md5": "78788c74258e0d3d45d8462cf155e561"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "com.arthenica",
+          "module": "smart-exception-java",
+          "version": {
+            "requires": "0.2.1"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "ffmpeg-kit-full-gpl-6.0-2.LTS.aar",
+          "url": "ffmpeg-kit-full-gpl-6.0-2.LTS.aar",
+          "size": 73596401,
+          "sha512": "e4ed759e0eb47b2bf7140b24b06d36b4aae9762842b2500569e6fc19a7d3c3ba05d001d0d99884564b8919f650c66f6ba3688f6888c82c4bb2672cc286cdc29a",
+          "sha256": "2ec56561ec593c4c4ff3b3c892b49f271699ac01f09d0f0249a7c8952a44554a",
+          "sha1": "17c94c4356a924e2643b5aab5efea4e7a0b2eb29",
+          "md5": "78788c74258e0d3d45d8462cf155e561"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseSourcePublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "ffmpeg-kit-full-gpl-6.0-2.LTS-sources.jar",
+          "url": "ffmpeg-kit-full-gpl-6.0-2.LTS-sources.jar",
+          "size": 52797,
+          "sha512": "e2b5124008aa5438c3477ae1d1f5b1e9d3b0f13f513e1b6d458c3ec5d25a52400a5abd5bc1535929bfff042625a7ebd4281fc3f93e95261f6a55dfe0b28993cb",
+          "sha256": "0a3a53d0bb9fa75341c610fefc54590e99f735e60d56916a3509ac3051ac3b00",
+          "sha1": "767e676594e638b42e22aceedce743da8eab9a3f",
+          "md5": "a866d207fad8b7ceb28e5d46d407189d"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseJavaDocPublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "javadoc",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "ffmpeg-kit-full-gpl-6.0-2.LTS-javadoc.jar",
+          "url": "ffmpeg-kit-full-gpl-6.0-2.LTS-javadoc.jar",
+          "size": 415415,
+          "sha512": "b64fea84792e8bbbd7cde87728aa48fd37a156bd704a028e2a69d51b3f846f96e6d66955180c6a07d82f9fa74763d503e481a44f7438fe3da921812feb1ff949",
+          "sha256": "d31162f064d6abc301944feb0805167d351863d8de02bef6989f3c5e0371b6d6",
+          "sha1": "3281da160fa58ba200eb6779ba525992a5bc218f",
+          "md5": "020a808a7a2e4583ed14e9eaadb02c78"
+        }
+      ]
+    }
+  ]
+}
