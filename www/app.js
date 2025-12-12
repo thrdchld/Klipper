@@ -898,17 +898,15 @@ async function processWithFFmpeg() {
 
         Elements.processStatus.textContent = `Memproses Part ${i + 1}/${totalClips}...`;
 
-        // Build FFmpeg command - simple crop to 9:16 aspect ratio
-        // Using simpler crop syntax that's more compatible
-        const filterComplex = 'crop=ih*9/16:ih';
-
-        // Calculate duration from start to end
+        // Build simplest possible FFmpeg command first
+        // Crop DISABLED for testing - just cut the video
         const startSeconds = timestampToSeconds(part.startStr);
         const endSeconds = timestampToSeconds(part.endStr);
         const duration = endSeconds - startSeconds;
 
-        // Use -t duration instead of -to for better compatibility
-        const command = `-y -ss ${startSeconds} -i ${inputPath} -t ${duration} -vf ${filterComplex} -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k ${outputPath}`;
+        // Simplest command: just cut video without re-encoding (copy codec)
+        // If this fails, the issue is with paths or FFmpeg itself
+        const command = `-y -ss ${startSeconds} -i "${inputPath}" -t ${duration} -c copy "${outputPath}"`;
 
         console.log('FFmpeg command:', command);
 
