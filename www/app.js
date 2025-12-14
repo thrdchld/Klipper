@@ -300,16 +300,7 @@ function initVideoControls() {
     video.addEventListener('timeupdate', () => {
         Elements.videoTimeline.value = video.currentTime;
         Elements.currentTimeDisplay.textContent = formatTime(video.currentTime);
-
-        // Auto-stop at selected part's end timestamp (only when playing)
-        if (!video.paused && AppState.selectedPartIndex !== undefined && AppState.parts.length > 0) {
-            const part = AppState.parts[AppState.selectedPartIndex];
-            const endSeconds = timestampToSeconds(part.endStr);
-            if (video.currentTime >= endSeconds - 0.1) { // Small buffer to prevent overshoot
-                video.pause();
-                // Don't set currentTime here - it would trigger another timeupdate
-            }
-        }
+        // Auto-stop REMOVED - was causing video freeze
     });
 
     // Update total duration when video loads
@@ -863,32 +854,15 @@ async function processWithFFmpeg() {
 
     console.log('Input video path:', inputPath);
 
-    // Start background processing (acquire WakeLock to prevent sleep)
-    try {
-        await FFmpegPlugin.startProcessing();
-        console.log('WakeLock acquired for background processing');
-    } catch (e) {
-        console.warn('Could not start background processing:', e);
-    }
+    // NOTE: Background processing (WakeLock/notifications) DISABLED
+    // These were causing app crashes
 
     Elements.processStatus.textContent = 'Memproses...';
 
     for (let i = 0; i < totalClips; i++) {
         if (!AppState.processing.isRunning) {
             Elements.processStatus.textContent = 'Dibatalkan';
-            try { await FFmpegPlugin.hideProgressNotification(); } catch (e) { }
             return;
-        }
-
-        // Update notification with progress
-        try {
-            await FFmpegPlugin.showProgressNotification({
-                progress: Math.round(((i + 1) / totalClips) * 100),
-                current: i + 1,
-                total: totalClips
-            });
-        } catch (e) {
-            // Notification may fail silently, continue processing
         }
 
         const part = AppState.parts[i];
