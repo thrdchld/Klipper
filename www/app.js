@@ -349,6 +349,19 @@ function initVideoControls() {
     Elements.skipForward.addEventListener('click', () => {
         video.currentTime = Math.min(video.duration, video.currentTime + 5);
     });
+
+    // Handle video errors to prevent freeze
+    video.addEventListener('error', (e) => {
+        console.error('Video error:', e, video.error);
+        Elements.processStatus.textContent = 'Video error - please refresh';
+    });
+
+    // Reset controls when video ends
+    video.addEventListener('ended', () => {
+        video.pause();
+        Elements.playIcon.classList.remove('hidden');
+        Elements.pauseIcon.classList.add('hidden');
+    });
 }
 
 // ========================================
@@ -823,6 +836,11 @@ async function processWithFFmpeg() {
     const totalClips = AppState.parts.length;
     let inputPath = AppState.videoPath;
 
+    // CRITICAL: Set isRunning flag BEFORE loop
+    AppState.processing.isRunning = true;
+    AppState.processing.completedClips = 0;
+    AppState.processing.progress = 0;
+
     Elements.processStatus.textContent = 'Menyiapkan video...';
 
     // If it's a content:// URI, we need to copy it to cache first
@@ -895,17 +913,23 @@ async function processWithFFmpeg() {
 
                 // Move file from cache to selected output folder + Klipper
                 Elements.processStatus.textContent = `Menyimpan Part ${i + 1}...`;
-                const moveResult = await FFmpegPlugin.moveToPublic({
-                    source: outputPath,
-                    filename: outputFilename,
-                    destFolder: AppState.outputFolder + '/Klipper'
-                });
 
-                if (moveResult && moveResult.success) {
-                    console.log(`Part ${i + 1} saved to:`, moveResult.path);
-                } else {
-                    console.warn(`Part ${i + 1} move failed:`, moveResult?.error);
-                    // File remains in cache, not critical error
+                try {
+                    const moveResult = await FFmpegPlugin.moveToPublic({
+                        source: outputPath,
+                        filename: outputFilename,
+                        destFolder: AppState.outputFolder + '/Klipper'
+                    });
+
+                    if (moveResult && moveResult.success) {
+                        console.log(`Part ${i + 1} saved to:`, moveResult.path);
+                    } else {
+                        console.warn(`Part ${i + 1} move failed:`, moveResult?.error);
+                        // File remains in cache, not critical error
+                    }
+                } catch (moveErr) {
+                    console.error(`Part ${i + 1} moveToPublic exception:`, moveErr);
+                    // Don't crash app - file is still in cache
                 }
             } else {
                 const errMsg = result ? result.error : 'No result';
