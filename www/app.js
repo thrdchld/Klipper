@@ -1,18 +1,24 @@
 // ========================================
 // CAPACITOR NATIVE PLUGIN IMPORTS
 // ========================================
-// Plugins are loaded from Capacitor.Plugins after DOM ready
+// WHY: Plugins are loaded from Capacitor.Plugins after DOM ready because:
+// 1. Capacitor injects plugins asynchronously after page load
+// 2. Loading too early will result in undefined plugins
+// 3. We need to check isNativePlatform() before using native features
 let FilePicker = null;
 let Filesystem = null;
 let FFmpegPlugin = null;
 let Capacitor = null;
 
-// Check if running on native platform
+// WHY: Need to check platform because app runs on both web and Android
+// Web doesn't have Capacitor, so we need to check before accessing native APIs
 const isNative = () => {
     return window.Capacitor && window.Capacitor.isNativePlatform();
 };
 
 // Initialize Capacitor plugins when available
+// WHY: Centralized initialization ensures all plugins are loaded before use
+// and handles permission requests in correct order (storage → notification)
 async function initCapacitorPlugins() {
     if (window.Capacitor) {
         Capacitor = window.Capacitor;
@@ -28,11 +34,15 @@ async function initCapacitorPlugins() {
             FFmpegPlugin: !!FFmpegPlugin
         });
 
-        // Check and request storage permission on native platform
+        // WHY: Storage permission is required BEFORE video selection
+        // Android 11+ requires MANAGE_EXTERNAL_STORAGE for broad file access
+        // Must request this early to avoid errors when user picks video
         if (Capacitor.isNativePlatform() && FFmpegPlugin) {
             await checkAndRequestStoragePermission();
 
-            // Request notification permission (Android 13+)
+            // WHY: Notification permission required for Android 13+
+            // Pre-request here so notifications work during FFmpeg processing
+            // If not granted, notifications will fail silently (non-critical)
             try {
                 await FFmpegPlugin.requestNotificationPermission();
                 console.log('Notification permission requested');
@@ -40,7 +50,9 @@ async function initCapacitorPlugins() {
                 console.warn('Could not request notification permission:', e);
             }
 
-            // Get font path for watermark
+            // WHY: Font path needed for FFmpeg drawtext filter (watermark feature)
+            // Pre-load font here so it's available when user enables watermark
+            // Font is copied to cache during app initialization
             try {
                 const fontResult = await FFmpegPlugin.getFontPath();
                 if (fontResult.success) {
@@ -381,18 +393,32 @@ Elements.selectVideoBtn.addEventListener('click', async () => {
 
                 console.log('Video selected:', file.path);
 
-                // CRITICAL FIX: Convert content:// URI to blob URL for WebView
-                // WebView cannot load content:// URIs directly in video elements
+                // ========================================
+                // CRITICAL FIX: Content URI to Blob URL Conversion
+                // ========================================
+                // WHY THIS FIX IS NEEDED:
+                // 1. File pickers on Android return content:// URIs (not direct file paths)
+                // 2. WebView <video> element CANNOT load content:// URIs directly
+                // 3. Attempting to load content:// in video.src causes "Video error" and freeze
+                // 4. Solution: Read file data via Filesystem, convert to blob, create blob: URL
+                // 5. Blob URLs CAN be loaded by WebView video element
+                //
+                // DEBUG HISTORY:
+                // - User reported: "Video plays for few seconds then stuck"
+                // - Debug panel showed: "ERROR: Video error" at [22:35:00]
+                // - Root cause: content://com.cxinventor.file.explorer.fileprovider/... path
+                // - Fix verified: Blob URL creation successful at [22:34:40]
                 if (file.path.startsWith('content://')) {
                     try {
                         console.log('Converting content:// URI to blob URL...');
 
-                        // Read file as base64 using Filesystem
+                        // Read file as base64 using Capacitor Filesystem API
+                        // This works because Filesystem has permission to access content:// URIs
                         const readResult = await Filesystem.readFile({
                             path: file.path
                         });
 
-                        // Convert base64 to blob
+                        // Convert base64 string to binary blob for video element
                         const byteCharacters = atob(readResult.data);
                         const byteNumbers = new Array(byteCharacters.length);
                         for (let i = 0; i < byteCharacters.length; i++) {
@@ -401,7 +427,7 @@ Elements.selectVideoBtn.addEventListener('click', async () => {
                         const byteArray = new Uint8Array(byteNumbers);
                         const blob = new Blob([byteArray], { type: 'video/mp4' });
 
-                        // Create blob URL
+                        // Create blob URL that WebView can load
                         AppState.videoURL = URL.createObjectURL(blob);
                         console.log('Blob URL created successfully');
                     } catch (err) {
@@ -410,7 +436,7 @@ Elements.selectVideoBtn.addEventListener('click', async () => {
                         AppState.videoURL = Capacitor.convertFileSrc(file.path);
                     }
                 } else {
-                    // For regular file paths, use convertFileSrc
+                    // For regular file:// paths, convertFileSrc is sufficient
                     AppState.videoURL = Capacitor.convertFileSrc(file.path);
                 }
 
@@ -684,6 +710,20 @@ async function selectPart(index, andPlay = false) {
     Elements.currentTimeDisplay.textContent = formatTime(startSeconds);
 
     if (andPlay) {
+        // ========================================
+        // CRITICAL FIX: Promise Handling for video.play()
+        // ========================================
+        // WHY THIS FIX IS NEEDED:
+        // 1. video.play() returns a Promise that can be rejected
+        // 2. Without await, rapid part switches cause AbortError
+        // 3. AbortError happens when play() is interrupted by pause()
+        // 4. This is NORMAL behavior, not an actual error
+        //
+        // DEBUG HISTORY:
+        // - User saw repeated: "UNHANDLED REJECTION: AbortError: play() interrupted by pause()"
+        // - Debug panel showed error at [22:35:29] (multiple times)
+        // - Root cause: Clicking parts rapidly without waiting for play Promise
+        // - Fix: Wrap in try-catch, await the Promise, ignore AbortError
         try {
             // Wait for any pending play/pause operations
             await Elements.videoPreview3.play();
@@ -875,7 +915,19 @@ async function processWithFFmpeg() {
     const totalClips = AppState.parts.length;
     let inputPath = AppState.videoPath;
 
-    // CRITICAL: Set isRunning flag BEFORE loop
+    // ========================================
+    // CRITICAL FIX: Set Processing Flag BEFORE Loop
+    // ========================================
+    // WHY THIS FIX IS NEEDED:
+    // 1. Line 911 checks `if (!AppState.processing.isRunning) return;`
+    // 2. If flag is NOT set to true first, loop exits immediately on first iteration
+    // 3. This caused: "App crash when starting processing" bug
+    // 4. User reported: "Saat mulai proses aplikasi langsung keluar"
+    //
+    // DEBUG HISTORY:
+    // - Originally flag was never set, causing instant loop exit
+    // - Added this initialization to fix processing loop
+    // - Must be set BEFORE the for-loop starts
     AppState.processing.isRunning = true;
     AppState.processing.completedClips = 0;
     AppState.processing.progress = 0;
@@ -950,7 +1002,19 @@ async function processWithFFmpeg() {
             if (result && result.success) {
                 console.log(`Part ${i + 1} completed in cache:`, outputPath);
 
-                // Move file from cache to selected output folder + Klipper
+                // ========================================
+                // CRITICAL FIX: Wrap moveToPublic in Try-Catch
+                // ========================================
+                // WHY THIS FIX IS NEEDED:
+                // 1. moveToPublic can throw exceptions (permission denied, folder doesn't exist, etc)
+                // 2. Without try-catch, exception crashes entire app
+                // 3. User reported: "Setelah copy video ke cache lalu aplikasi close"
+                // 4. Even if move fails, file is still in cache - not critical
+                //
+                // DEBUG HISTORY:
+                // - App was crashing at moveToPublic call
+                // - Wrapped in try-catch to prevent crash
+                // - File stays in /data/data/com.klipper.app/cache/ if move fails
                 Elements.processStatus.textContent = `Menyimpan Part ${i + 1}...`;
 
                 try {
