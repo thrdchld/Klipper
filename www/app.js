@@ -379,13 +379,43 @@ Elements.selectVideoBtn.addEventListener('click', async () => {
                 AppState.videoPath = file.path;
                 AppState.videoFilename = file.name || file.path.split('/').pop();
 
-                // Convert native path to displayable URL for thumbnail
-                AppState.videoURL = Capacitor.convertFileSrc(file.path);
+                console.log('Video selected:', file.path);
+
+                // CRITICAL FIX: Convert content:// URI to blob URL for WebView
+                // WebView cannot load content:// URIs directly in video elements
+                if (file.path.startsWith('content://')) {
+                    try {
+                        console.log('Converting content:// URI to blob URL...');
+
+                        // Read file as base64 using Filesystem
+                        const readResult = await Filesystem.readFile({
+                            path: file.path
+                        });
+
+                        // Convert base64 to blob
+                        const byteCharacters = atob(readResult.data);
+                        const byteNumbers = new Array(byteCharacters.length);
+                        for (let i = 0; i < byteCharacters.length; i++) {
+                            byteNumbers[i] = byteCharacters.charCodeAt(i);
+                        }
+                        const byteArray = new Uint8Array(byteNumbers);
+                        const blob = new Blob([byteArray], { type: 'video/mp4' });
+
+                        // Create blob URL
+                        AppState.videoURL = URL.createObjectURL(blob);
+                        console.log('Blob URL created successfully');
+                    } catch (err) {
+                        console.error('Failed to convert content URI to blob:', err);
+                        // Fallback to convertFileSrc (may not work but worth trying)
+                        AppState.videoURL = Capacitor.convertFileSrc(file.path);
+                    }
+                } else {
+                    // For regular file paths, use convertFileSrc
+                    AppState.videoURL = Capacitor.convertFileSrc(file.path);
+                }
 
                 // Show thumbnail and filename
                 displaySelectedVideo();
-
-                console.log('Video selected:', file.path);
                 updateNavButtons();
             }
         } catch (e) {
