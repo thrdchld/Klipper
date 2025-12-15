@@ -670,7 +670,7 @@ function renderPartsList() {
 }
 
 // Select a part: update selectedPartIndex, seek to start, optionally play
-function selectPart(index, andPlay = false) {
+async function selectPart(index, andPlay = false) {
     if (index < 0 || index >= AppState.parts.length) return;
 
     AppState.selectedPartIndex = index;
@@ -684,7 +684,16 @@ function selectPart(index, andPlay = false) {
     Elements.currentTimeDisplay.textContent = formatTime(startSeconds);
 
     if (andPlay) {
-        Elements.videoPreview3.play();
+        try {
+            // Wait for any pending play/pause operations
+            await Elements.videoPreview3.play();
+            console.log('Video playback started for part', index + 1);
+        } catch (err) {
+            // Ignore AbortError - it's normal when user quickly switches parts
+            if (err.name !== 'AbortError') {
+                console.error('Play error:', err);
+            }
+        }
     }
 }
 
