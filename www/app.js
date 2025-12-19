@@ -5,6 +5,7 @@
 // 1. Capacitor injects plugins asynchronously after page load
 // 2. Loading too early will result in undefined plugins
 // 3. We need to check isNativePlatform() before using native features
+// NOTE: Capacitor is loaded via script tag in index.html, available as window.Capacitor
 let FilePicker = null;
 let Filesystem = null;
 let FFmpegPlugin = null;
@@ -394,50 +395,28 @@ Elements.selectVideoBtn.addEventListener('click', async () => {
                 console.log('Video selected:', file.path);
 
                 // ========================================
-                // CRITICAL FIX: Content URI to Blob URL Conversion
+                // SIMPLIFIED FIX: Use convertFileSrc for All URIs
                 // ========================================
-                // WHY THIS FIX IS NEEDED:
-                // 1. File pickers on Android return content:// URIs (not direct file paths)
-                // 2. WebView <video> element CANNOT load content:// URIs directly
-                // 3. Attempting to load content:// in video.src causes "Video error" and freeze
-                // 4. Solution: Read file data via Filesystem, convert to blob, create blob: URL
-                // 5. Blob URLs CAN be loaded by WebView video element
+                // WHY THIS APPROACH:
+                // 1. Blob conversion loads ENTIRE video into memory → crash for large videos
+                // 2. Capacitor.convertFileSrc handles both content:// and file:// URIs
+                // 3. WebView can load convertFileSrc URLs directly without memory issues
+                // 4. Much simpler and more reliable
                 //
-                // DEBUG HISTORY:
-                // - User reported: "Video plays for few seconds then stuck"
-                // - Debug panel showed: "ERROR: Video error" at [22:35:00]
-                // - Root cause: content://com.cxinventor.file.explorer.fileprovider/... path
-                // - Fix verified: Blob URL creation successful at [22:34:40]
-                if (file.path.startsWith('content://')) {
-                    try {
-                        console.log('Converting content:// URI to blob URL...');
-
-                        // Read file as base64 using Capacitor Filesystem API
-                        // This works because Filesystem has permission to access content:// URIs
-                        const readResult = await Filesystem.readFile({
-                            path: file.path
-                        });
-
-                        // Convert base64 string to binary blob for video element
-                        const byteCharacters = atob(readResult.data);
-                        const byteNumbers = new Array(byteCharacters.length);
-                        for (let i = 0; i < byteCharacters.length; i++) {
-                            byteNumbers[i] = byteCharacters.charCodeAt(i);
-                        }
-                        const byteArray = new Uint8Array(byteNumbers);
-                        const blob = new Blob([byteArray], { type: 'video/mp4' });
-
-                        // Create blob URL that WebView can load
-                        AppState.videoURL = URL.createObjectURL(blob);
-                        console.log('Blob URL created successfully');
-                    } catch (err) {
-                        console.error('Failed to convert content URI to blob:', err);
-                        // Fallback to convertFileSrc (may not work but worth trying)
-                        AppState.videoURL = Capacitor.convertFileSrc(file.path);
-                    }
-                } else {
-                    // For regular file:// paths, convertFileSrc is sufficient
+                // PREVIOUS ISSUE:
+                // - Blob conversion code caused OutOfMemory errors for videos > 100MB
+                // - User reported app crash when selecting large videos
+                //
+                // CURRENT FIX:
+                // - Use convertFileSrc for ALL paths (content://, file://, etc.)
+                // - Let Android WebView handle the URI conversion internally
+                try {
                     AppState.videoURL = Capacitor.convertFileSrc(file.path);
+                    console.log('Video URL created:', AppState.videoURL);
+                } catch (err) {
+                    console.error('Failed to convert video path:', err);
+                    // Fallback: try using path directly
+                    AppState.videoURL = file.path;
                 }
 
                 // Show thumbnail and filename
@@ -937,7 +916,7 @@ async function processWithFFmpeg() {
     // If it's a content:// URI, we need to copy it to cache first
     if (inputPath.startsWith('content://')) {
         console.log('Content URI detected, copying to cache...');
-        alert('Copying video to cache...');
+        Elements.processStatus.textContent = 'Menyalin video ke cache...';
 
         try {
             const copyResult = await FFmpegPlugin.copyToCache({ uri: inputPath });
@@ -945,16 +924,16 @@ async function processWithFFmpeg() {
             if (copyResult && copyResult.success) {
                 inputPath = copyResult.path;
                 console.log('Video copied to:', inputPath);
-                alert('Video ready: ' + inputPath);
+                Elements.processStatus.textContent = 'Video siap: ' + inputPath.split('/').pop();
             } else {
                 const errMsg = copyResult ? copyResult.error : 'Unknown copy error';
-                alert('Copy failed: ' + errMsg);
-                Elements.processStatus.textContent = 'Error: ' + errMsg;
+                console.error('Copy failed:', errMsg);
+                Elements.processStatus.textContent = 'Error saat copy: ' + errMsg;
                 finishProcessing();
                 return;
             }
         } catch (e) {
-            alert('Copy exception: ' + e.message);
+            console.error('Copy exception:', e);
             Elements.processStatus.textContent = 'Error: ' + e.message;
             finishProcessing();
             return;
